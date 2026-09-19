@@ -1,27 +1,45 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Client, InvoiceItem } from '../lib/supabase'
+import type { Client, InvoiceItem, Invoice } from '../lib/supabase'
 import { Plus, Trash2, X, Loader, ChevronDown } from 'lucide-react'
 
 const emptyItem = (): InvoiceItem => ({ particulars: '', hsn_code: '', qty: 1, rate: 0, amount: 0 })
 
-export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => void, preClient?: Client }) {
+export default function NewInvoiceForm({
+  onDone, preClient, editInvoice
+}: {
+  onDone: () => void
+  preClient?: Client
+  editInvoice?: Invoice
+}) {
   const [clients, setClients] = useState<Client[]>([])
-  const [clientId, setClientId] = useState(preClient?.id || '')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [modeOfDelivery, setModeOfDelivery] = useState('')
-  const [vehicleNo, setVehicleNo] = useState('')
-  const [gstType, setGstType] = useState<'cgst_sgst' | 'igst'>('cgst_sgst')
-  const [cgstRate, setCgstRate] = useState(9)
-  const [sgstRate, setSgstRate] = useState(9)
-  const [igstRate, setIgstRate] = useState(18)
-  const [items, setItems] = useState<InvoiceItem[]>([emptyItem()])
+  const [clientId, setClientId] = useState(editInvoice?.client_id || preClient?.id || '')
+  const [invoiceNo, setInvoiceNo] = useState<string>('')
+  const [date, setDate] = useState(editInvoice?.date || new Date().toISOString().split('T')[0])
+  const [modeOfDelivery, setModeOfDelivery] = useState(editInvoice?.mode_of_delivery || '')
+  const [vehicleNo, setVehicleNo] = useState(editInvoice?.vehicle_no || '')
+  const [gstType, setGstType] = useState<'cgst_sgst' | 'igst'>(
+    editInvoice ? (editInvoice.igst_rate > 0 ? 'igst' : 'cgst_sgst') : 'cgst_sgst'
+  )
+  const [cgstRate, setCgstRate] = useState(editInvoice?.cgst_rate ?? 9)
+  const [sgstRate, setSgstRate] = useState(editInvoice?.sgst_rate ?? 9)
+  const [igstRate, setIgstRate] = useState(editInvoice?.igst_rate ?? 18)
+  const [items, setItems] = useState<InvoiceItem[]>(
+    editInvoice?.invoice_items?.length ? editInvoice.invoice_items : [emptyItem()]
+  )
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     supabase.from('clients').select('*').order('name').then(({ data }) => {
       if (data) setClients(data)
     })
+    // Set invoice number
+    if (editInvoice) {
+      setInvoiceNo(String(editInvoice.invoice_no))
+    } else {
+      supabase.from('invoices').select('invoice_no').order('invoice_no', { ascending: false }).limit(1)
+        .then(({ data }) => setInvoiceNo(String(((data?.[0]?.invoice_no) || 0) + 1)))
+    }
   }, [])
 
   const updateItem = (i: number, field: keyof InvoiceItem, val: string | number) => {
@@ -43,16 +61,12 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
   async function save() {
     if (!clientId) return alert('Please select a client')
     if (items.every(i => !i.particulars.trim())) return alert('Add at least one item')
+    if (!invoiceNo) return alert('Invoice number is required')
     setSaving(true)
 
-    // Get next invoice number
-    const { data: last } = await supabase
-      .from('invoices').select('invoice_no').order('invoice_no', { ascending: false }).limit(1)
-    const nextNo = ((last?.[0]?.invoice_no) || 0) + 1
-
-    const { data: inv, error } = await supabase.from('invoices').insert([{
+    const payload = {
       client_id: clientId,
-      invoice_no: nextNo,
+      invoice_no: Number(invoiceNo),
       date,
       mode_of_delivery: modeOfDelivery,
       vehicle_no: vehicleNo,
@@ -62,13 +76,29 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
       subtotal,
       tax_amount: taxAmount,
       total,
-    }]).select().single()
+    }
 
-    if (error) { alert('Error saving invoice'); setSaving(false); return }
+    let invId = editInvoice?.id
+
+    if (editInvoice) {
+      await supabase.from('invoices').update(payload).eq('id', editInvoice.id)
+      await supabase.from('invoice_items').delete().eq('invoice_id', editInvoice.id)
+    } else {
+      const { data: inv, error } = await supabase.from('invoices').insert([payload]).select().single()
+      if (error) { alert('Error saving invoice'); setSaving(false); return }
+      invId = inv.id
+    }
 
     const validItems = items.filter(i => i.particulars.trim())
     await supabase.from('invoice_items').insert(
-      validItems.map(i => ({ ...i, invoice_id: inv.id }))
+      validItems.map(i => ({
+        invoice_id: invId,
+        particulars: i.particulars,
+        hsn_code: i.hsn_code,
+        qty: i.qty,
+        rate: i.rate,
+        amount: i.amount,
+      }))
     )
     setSaving(false)
     onDone()
@@ -78,7 +108,7 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
       <div className="bg-white w-full rounded-t-2xl max-h-[95vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-5 py-4 z-10">
-          <h2 className="text-lg font-bold">New Invoice</h2>
+          <h2 className="text-lg font-bold">{editInvoice ? 'Edit Invoice' : 'New Invoice'}</h2>
           <button onClick={onDone}><X size={20} className="text-gray-400" /></button>
         </div>
 
@@ -96,25 +126,35 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
             </div>
           </div>
 
-          {/* Date + Mode + Vehicle */}
+          {/* Invoice No + Date */}
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 block mb-1">Invoice No. *</label>
+              <input type="number" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)}
+                placeholder="1"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
+            </div>
             <div>
               <label className="text-xs font-semibold text-gray-500 block mb-1">Date *</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
             </div>
+          </div>
+
+          {/* Mode + Vehicle */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-500 block mb-1">Mode of Delivery</label>
               <input value={modeOfDelivery} onChange={e => setModeOfDelivery(e.target.value)}
-                placeholder="e.g. By Hand"
+                placeholder="By Hand"
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
             </div>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-500 block mb-1">Vehicle No.</label>
-            <input value={vehicleNo} onChange={e => setVehicleNo(e.target.value)}
-              placeholder="GJ-01-AB-1234"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
+            <div>
+              <label className="text-xs font-semibold text-gray-500 block mb-1">Vehicle No.</label>
+              <input value={vehicleNo} onChange={e => setVehicleNo(e.target.value)}
+                placeholder="GJ-01-AB-1234"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
+            </div>
           </div>
 
           {/* GST Type */}
@@ -130,23 +170,22 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
                 IGST
               </button>
             </div>
-
             {gstType === 'cgst_sgst' ? (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">CGST %</label>
+                  <label className="text-xs text-gray-400">CGST %</label>
                   <input type="number" value={cgstRate} onChange={e => setCgstRate(Number(e.target.value))}
                     className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-orange-400" />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">SGST %</label>
+                  <label className="text-xs text-gray-400">SGST %</label>
                   <input type="number" value={sgstRate} onChange={e => setSgstRate(Number(e.target.value))}
                     className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-orange-400" />
                 </div>
               </div>
             ) : (
               <div className="mt-3">
-                <label className="text-xs text-gray-500 block mb-1">IGST %</label>
+                <label className="text-xs text-gray-400">IGST %</label>
                 <input type="number" value={igstRate} onChange={e => setIgstRate(Number(e.target.value))}
                   className="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-orange-400" />
               </div>
@@ -167,14 +206,14 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
                       </button>
                     )}
                   </div>
-                  <input value={item.particulars} onChange={e => updateItem(i, 'particulars', e.target.value)}
+                  <textarea value={item.particulars} onChange={e => updateItem(i, 'particulars', e.target.value)}
                     placeholder="Particulars / Description"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-orange-400" />
+                    rows={2}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-orange-400 resize-none" />
                   <div className="grid grid-cols-3 gap-2">
                     <div>
                       <label className="text-xs text-gray-400">HSN Code</label>
                       <input value={item.hsn_code} onChange={e => updateItem(i, 'hsn_code', e.target.value)}
-                        placeholder="998719"
                         className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white outline-none focus:border-orange-400" />
                     </div>
                     <div>
@@ -189,7 +228,7 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
                     </div>
                   </div>
                   <div className="text-right text-sm font-bold text-orange-600">
-                    Amount: ₹{item.amount.toLocaleString('en-IN')}
+                    Amount: ₹{(item.amount || 0).toLocaleString('en-IN')}
                   </div>
                 </div>
               ))}
@@ -200,16 +239,18 @@ export default function NewInvoiceForm({ onDone, preClient }: { onDone: () => vo
             </button>
           </div>
 
-          {/* Totals preview */}
+          {/* Totals */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
             <div className="flex justify-between text-gray-600"><span>Sub Total</span><span>₹{subtotal.toLocaleString('en-IN')}</span></div>
             <div className="flex justify-between text-gray-600"><span>Tax (GST)</span><span>₹{taxAmount.toLocaleString('en-IN')}</span></div>
-            <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2"><span>Total</span><span className="text-orange-600">₹{total.toLocaleString('en-IN')}</span></div>
+            <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
+              <span>Total</span><span className="text-orange-600">₹{total.toLocaleString('en-IN')}</span>
+            </div>
           </div>
 
           <button onClick={save} disabled={saving}
             className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-base">
-            {saving ? <Loader size={20} className="animate-spin" /> : 'Generate Invoice'}
+            {saving ? <Loader size={20} className="animate-spin" /> : (editInvoice ? 'Update Invoice' : 'Generate Invoice')}
           </button>
         </div>
       </div>
