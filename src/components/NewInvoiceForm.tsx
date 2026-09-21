@@ -206,26 +206,30 @@ export default function NewInvoiceForm({
                       </button>
                     )}
                   </div>
+                  {/* Particulars — big textarea */}
                   <textarea value={item.particulars} onChange={e => updateItem(i, 'particulars', e.target.value)}
-                    placeholder="Particulars / Description"
-                    rows={2}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-orange-400 resize-none" />
-                  <div className="grid grid-cols-5 gap-2">
+                    placeholder="Particulars / Description of work done..."
+                    rows={4}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white outline-none focus:border-orange-400 resize-none leading-relaxed" />
+                  {/* HSN (max 6) | Qty | Rate */}
+                  <div className="grid grid-cols-8 gap-2">
                     <div className="col-span-2">
-                      <label className="text-xs text-gray-400">HSN</label>
-                      <input value={item.hsn_code} onChange={e => updateItem(i, 'hsn_code', e.target.value)}
+                      <label className="text-xs text-gray-400 font-medium">HSN</label>
+                      <input value={item.hsn_code}
+                        onChange={e => updateItem(i, 'hsn_code', e.target.value.slice(0, 6))}
+                        maxLength={6}
                         placeholder="998719"
-                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white outline-none focus:border-orange-400" />
-                    </div>
-                    <div className="col-span-1">
-                      <label className="text-xs text-gray-400">Qty</label>
-                      <input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', Number(e.target.value))}
-                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white outline-none focus:border-orange-400" />
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white outline-none focus:border-orange-400 text-center tracking-wider" />
                     </div>
                     <div className="col-span-2">
-                      <label className="text-xs text-gray-400">Rate (₹)</label>
+                      <label className="text-xs text-gray-400 font-medium">Qty</label>
+                      <input type="number" value={item.qty} onChange={e => updateItem(i, 'qty', Number(e.target.value))}
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white outline-none focus:border-orange-400 text-center" />
+                    </div>
+                    <div className="col-span-4">
+                      <label className="text-xs text-gray-400 font-medium">Rate (₹)</label>
                       <input type="number" value={item.rate} onChange={e => updateItem(i, 'rate', Number(e.target.value))}
-                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white outline-none focus:border-orange-400" />
+                        className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white outline-none focus:border-orange-400" />
                     </div>
                   </div>
                   <div className="text-right text-sm font-bold text-orange-600">
