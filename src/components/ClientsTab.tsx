@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { Plus, User, ChevronRight, X, Loader, Trash2 } from 'lucide-react'
 import type { Client } from '../lib/supabase'
+import { useBackClose } from '../utils/useBackClose'
 
 const empty = { name: '', address: '', gstin: '', state: 'Gujarat', phone: '' }
 
@@ -15,6 +16,8 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
   const [delClient, setDelClient] = useState<(Client & { invoice_count?: number }) | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  useBackClose(showForm, () => setShowForm(false))
+  useBackClose(!!delClient, () => setDelClient(null))
   useEffect(() => { fetchClients() }, [])
 
   async function fetchClients() {

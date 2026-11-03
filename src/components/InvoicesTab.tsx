@@ -4,6 +4,7 @@ import type { Invoice, Client } from '../lib/supabase'
 import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText } from 'lucide-react'
 import NewInvoiceForm from './NewInvoiceForm'
 import InvoicePrint from './InvoicePrint'
+import { useBackClose } from '../utils/useBackClose'
 
 const COLORS = [
   { bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-400' },
@@ -15,7 +16,7 @@ const COLORS = [
 ]
 const SHEET_PX = 793.7 // 210mm at 96dpi
 
-function Preview({ invoice }: { invoice: Invoice }) {
+function Preview({ invoice, capturing }: { invoice: Invoice; capturing: boolean }) {
   const box = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0.45)
   useEffect(() => {
@@ -36,9 +37,11 @@ function Preview({ invoice }: { invoice: Invoice }) {
         </div>
       </div>
       {/* Hidden full-size copy used for PDF capture */}
-      <div style={{ position: 'fixed', left: -10000, top: 0 }} aria-hidden>
-        <InvoicePrint invoice={invoice} id="invoice-pdf-source" />
-      </div>
+      {capturing && (
+        <div style={{ position: 'fixed', left: 0, top: 0, zIndex: -1, pointerEvents: 'none', opacity: 0 }} aria-hidden>
+          <InvoicePrint invoice={invoice} id="invoice-pdf-source" />
+        </div>
+      )}
     </div>
   )
 }
@@ -56,6 +59,11 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [newType, setNewType] = useState<'gst' | 'nongst'>('gst')
   const [confirmDel, setConfirmDel] = useState<Invoice | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  useBackClose(!!selected, () => setSelected(null))
+  useBackClose(showType, () => setShowType(false))
+  useBackClose(showForm || !!editInvoice, () => { setShowForm(false); setEditInvoice(null) })
+  useBackClose(!!confirmDel, () => setConfirmDel(null))
 
   useEffect(() => { fetchInvoices() }, [filterClient])
   useEffect(() => {
@@ -84,6 +92,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
 
   async function run(kind: 'share' | 'download', inv: Invoice) {
     setBusy(kind)
+    await new Promise(r => setTimeout(r, 150))
     try {
       const m = await import('../utils/pdfExport')
       if (kind === 'share') await m.shareInvoicePDF(inv)
@@ -132,7 +141,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             <h2 className="font-bold text-sm md:text-base truncate">Invoice #{String(selected.invoice_no).padStart(2, '0')}</h2>
             <p className="text-xs text-slate-400 truncate">{selected.clients?.name}</p>
           </div>
-          <button onClick={() => { setEditInvoice(selected); setSelected(null) }} title="Edit"
+          <button onClick={() => setEditInvoice(selected)} title="Edit"
             className="p-2.5 bg-blue-50 hover:bg-blue-100 rounded-xl"><Pencil size={16} className="text-blue-600" /></button>
           <button onClick={() => setConfirmDel(selected)} title="Delete"
             className="p-2.5 bg-red-50 hover:bg-red-100 rounded-xl"><Trash2 size={16} className="text-red-500" /></button>
@@ -146,7 +155,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           </button>
         </div>
         <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8">
-          <Preview invoice={selected} />
+          <Preview invoice={selected} capturing={!!busy} />
         </div>
         {confirmModal}
       </div>
@@ -259,7 +268,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           preClient={filterClient}
           editInvoice={editInvoice || undefined}
           invoiceType={editInvoice ? (editInvoice.invoice_type === 'nongst' ? 'nongst' : 'gst') : newType}
-          onDone={() => { setShowForm(false); setEditInvoice(null); fetchInvoices() }}
+          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
         />
       )}
       {confirmModal}

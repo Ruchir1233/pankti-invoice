@@ -4,3 +4,6 @@
   body { margin: 0; }
   @page { margin: 0; size: A4; }
 }
+
+html, body, #root { overflow-x: hidden; max-width: 100%; }
+body { overscroll-behavior-y: none; }
