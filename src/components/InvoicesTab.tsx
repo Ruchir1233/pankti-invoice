@@ -192,16 +192,16 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             <Receipt className="mx-auto mb-2 text-slate-300" size={36} />No invoices yet
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-3">
             {filtered.map(inv => {
               const idx = invColors[inv.id] ?? 0
               const color = COLORS[idx]
               const ng = inv.invoice_type === 'nongst'
               return (
                 <div key={inv.id} onClick={() => setSelected(inv)}
-                  className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow">
+                  className="min-w-0 bg-white border border-slate-100 rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${color.bg} ${color.text}`}>
                         #{String(inv.invoice_no).padStart(2, '0')}
                       </span>
@@ -218,8 +218,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                       <ChevronRight size={14} className="text-slate-300" />
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
-                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-50">
+                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       {COLORS.map((c, i) => (
                         <button key={i} onClick={() => saveColor(inv.id, i)} aria-label="label colour"
                           className={`w-5 h-5 rounded-full ${c.dot} ${idx === i ? 'ring-2 ring-offset-1 ring-slate-500' : 'opacity-50'}`} />

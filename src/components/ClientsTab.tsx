@@ -74,7 +74,7 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
 
       {/* List */}
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-6">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-3">
         {loading ? (
           <div className="flex justify-center py-12"><Loader className="animate-spin text-orange-400" /></div>
         ) : filtered.length === 0 ? (
