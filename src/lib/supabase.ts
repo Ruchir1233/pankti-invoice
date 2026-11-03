@@ -39,6 +39,17 @@ export type Invoice = {
   tax_amount: number
   total: number
   created_at: string
+  invoice_type?: 'gst' | 'nongst'
+  company_name?: string | null
+  company_address?: string | null
+  company_phone?: string | null
   clients?: Client
   invoice_items?: InvoiceItem[]
+}
+
+export type Company = {
+  id: string
+  name: string
+  address: string
+  phone: string
 }

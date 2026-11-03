@@ -1,13 +1,17 @@
 import type { Invoice } from '../lib/supabase'
 import { numberToWords } from '../utils/numberToWords'
 
-export default function InvoicePrint({ invoice }: { invoice: Invoice }) {
+export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoice: Invoice; id?: string }) {
   const client = invoice.clients!
+  const gst = invoice.invoice_type !== 'nongst'
+  const coName = gst ? 'PANKTI ENGINEERING' : (invoice.company_name || 'PANKTI ENGINEERING')
+  const coAddress = gst ? 'Opp Tiles Factory Dhamdachi, Valsad' : (invoice.company_address || '')
+  const coPhone = gst ? '9879523937' : (invoice.company_phone || '')
   const items = invoice.invoice_items || []
   const emptyRows = Math.max(0, 8 - items.length)
 
   return (
-    <div id="invoice-print" className="invoice-sheet bg-white text-black" style={{
+    <div id={id} className="invoice-sheet bg-white text-black" style={{
       width: '210mm',
       minHeight: '297mm',
       padding: '10mm',
@@ -18,9 +22,9 @@ export default function InvoicePrint({ invoice }: { invoice: Invoice }) {
     }}>
       {/* Header */}
       <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '12px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', margin: 0 }}>TAX INVOICE</p>
-        <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '2px', margin: '4px 0' }}>PANKTI ENGINEERING</h1>
-        <p style={{ fontSize: '11px', margin: 0 }}>Opp Tiles Factory Dhamdachi, Valsad &nbsp;|&nbsp; Phone No.: 9879523937</p>
+        <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', margin: 0 }}>{gst ? 'TAX INVOICE' : 'INVOICE'}</p>
+        <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '2px', margin: '4px 0' }}>{coName}</h1>
+        <p style={{ fontSize: '11px', margin: 0, whiteSpace: 'pre-wrap' }}>{[coAddress, coPhone && `Phone No.: ${coPhone}`].filter(Boolean).join('  |  ')}</p>
       </div>
 
       {/* Client + Invoice */}
@@ -28,7 +32,8 @@ export default function InvoicePrint({ invoice }: { invoice: Invoice }) {
         <div style={{ flex: 1 }}>
           <p style={{ margin: '2px 0' }}><b>M/s </b>{client.name}</p>
           <p style={{ margin: '2px 0', whiteSpace: 'pre-wrap' }}>{client.address}</p>
-          <p style={{ margin: '2px 0' }}><b>GSTIN : </b>{client.gstin || '—'}&nbsp;&nbsp;&nbsp;<b>State : </b>{client.state || '—'}</p>
+          {gst && <p style={{ margin: '2px 0' }}><b>GSTIN : </b>{client.gstin || '—'}&nbsp;&nbsp;&nbsp;<b>State : </b>{client.state || '—'}</p>}
+          {!gst && client.phone && <p style={{ margin: '2px 0' }}><b>Phone : </b>{client.phone}</p>}
         </div>
         <div style={{ minWidth: '180px', textAlign: 'right' }}>
           <p style={{ margin: '2px 0' }}><b>Invoice No.: </b>{String(invoice.invoice_no).padStart(2, '0')}</p>
@@ -79,28 +84,29 @@ export default function InvoicePrint({ invoice }: { invoice: Invoice }) {
             <span style={{ flex: 1, fontWeight: 700, padding: '4px 8px', borderRight: '1px solid black' }}>Sub Total</span>
             <span style={{ padding: '4px 8px', textAlign: 'right', width: '95px' }}>{invoice.subtotal.toLocaleString('en-IN')}/-</span>
           </div>
-          {invoice.cgst_rate > 0 && (
+          {gst && invoice.cgst_rate > 0 && (
             <div style={{ display: 'flex', borderBottom: '1px solid black' }}>
               <span style={{ flex: 1, padding: '4px 8px', borderRight: '1px solid black' }}>Add : CGST {invoice.cgst_rate}%</span>
               <span style={{ padding: '4px 8px', textAlign: 'right', width: '95px' }}>{(invoice.subtotal * invoice.cgst_rate / 100).toLocaleString('en-IN')}/-</span>
             </div>
           )}
-          {invoice.sgst_rate > 0 && (
+          {gst && invoice.sgst_rate > 0 && (
             <div style={{ display: 'flex', borderBottom: '1px solid black' }}>
               <span style={{ flex: 1, padding: '4px 8px', borderRight: '1px solid black' }}>Add : SGST {invoice.sgst_rate}%</span>
               <span style={{ padding: '4px 8px', textAlign: 'right', width: '95px' }}>{(invoice.subtotal * invoice.sgst_rate / 100).toLocaleString('en-IN')}/-</span>
             </div>
           )}
-          {invoice.igst_rate > 0 && (
+          {gst && invoice.igst_rate > 0 && (
             <div style={{ display: 'flex', borderBottom: '1px solid black' }}>
               <span style={{ flex: 1, padding: '4px 8px', borderRight: '1px solid black' }}>Add : IGST {invoice.igst_rate}%</span>
               <span style={{ padding: '4px 8px', textAlign: 'right', width: '95px' }}>{(invoice.subtotal * invoice.igst_rate / 100).toLocaleString('en-IN')}/-</span>
             </div>
           )}
+          {gst && (
           <div style={{ display: 'flex', borderBottom: '1px solid black' }}>
             <span style={{ flex: 1, fontWeight: 700, padding: '4px 8px', borderRight: '1px solid black' }}>Tax Amount : GST</span>
             <span style={{ padding: '4px 8px', textAlign: 'right', width: '95px' }}>{invoice.tax_amount.toLocaleString('en-IN')}/-</span>
-          </div>
+          </div>)}
           <div style={{ display: 'flex' }}>
             <span style={{ flex: 1, fontWeight: 700, padding: '4px 8px', borderRight: '1px solid black' }}>Total Amount</span>
             <span style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, width: '95px' }}>{invoice.total.toLocaleString('en-IN')}/-</span>
@@ -110,11 +116,11 @@ export default function InvoicePrint({ invoice }: { invoice: Invoice }) {
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '16px', paddingTop: '8px', borderTop: '1px solid black' }}>
-        <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>GSTIN : 24AIFPP7184F1Z3</p>
+        <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>{gst ? 'GSTIN : 24AIFPP7184F1Z3' : ''}</p>
         <div style={{ textAlign: 'center' }}>
-          <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>For PANKTI ENGINEERING</p>
+          <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>For {coName}</p>
           <div style={{ height: '50px' }}></div>
-          <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>PROPRIETOR</p>
+          <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>{gst ? 'PROPRIETOR' : 'AUTHORISED SIGNATORY'}</p>
         </div>
       </div>
     </div>

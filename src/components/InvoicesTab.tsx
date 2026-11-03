@@ -1,49 +1,76 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Invoice, Client } from '../lib/supabase'
-import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil } from 'lucide-react'
+import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText } from 'lucide-react'
 import NewInvoiceForm from './NewInvoiceForm'
 import InvoicePrint from './InvoicePrint'
 
 const COLORS = [
-  { label: 'Orange',  bg: 'bg-orange-100',  text: 'text-orange-700',  dot: 'bg-orange-400' },
-  { label: 'Blue',    bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-400' },
-  { label: 'Green',   bg: 'bg-green-100',   text: 'text-green-700',   dot: 'bg-green-400' },
-  { label: 'Purple',  bg: 'bg-purple-100',  text: 'text-purple-700',  dot: 'bg-purple-400' },
-  { label: 'Red',     bg: 'bg-red-100',     text: 'text-red-700',     dot: 'bg-red-400' },
-  { label: 'Yellow',  bg: 'bg-yellow-100',  text: 'text-yellow-700',  dot: 'bg-yellow-400' },
+  { bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-400' },
+  { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-400' },
+  { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-400' },
+  { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-400' },
+  { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-400' },
+  { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-400' },
 ]
+const SHEET_PX = 793.7 // 210mm at 96dpi
 
-export default function InvoicesTab({ filterClient, onClearFilter }: { filterClient?: Client, onClearFilter?: () => void }) {
+function Preview({ invoice }: { invoice: Invoice }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [scale, setScale] = useState(0.45)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const update = () => setScale(Math.min(1, el.clientWidth / SHEET_PX))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return (
+    <div ref={box} className="w-full max-w-[794px] mx-auto">
+      <div style={{ height: 1123 * scale, overflow: 'hidden' }}>
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: SHEET_PX }}
+          className="shadow-md bg-white">
+          <InvoicePrint invoice={invoice} id="invoice-preview" />
+        </div>
+      </div>
+      {/* Hidden full-size copy used for PDF capture */}
+      <div style={{ position: 'fixed', left: -10000, top: 0 }} aria-hidden>
+        <InvoicePrint invoice={invoice} id="invoice-pdf-source" />
+      </div>
+    </div>
+  )
+}
+
+export default function InvoicesTab({ filterClient, onClearFilter }: { filterClient?: Client; onClearFilter?: () => void }) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null)
   const [selected, setSelected] = useState<Invoice | null>(null)
-  const [colorPicker, setColorPicker] = useState<string | null>(null)
   const [invColors, setInvColors] = useState<Record<string, number>>({})
-  const [pdfLoading, setPdfLoading] = useState(false)
+  const [busy, setBusy] = useState<'' | 'share' | 'download'>('')
+  const [showType, setShowType] = useState(false)
+  const [newType, setNewType] = useState<'gst' | 'nongst'>('gst')
+  const [confirmDel, setConfirmDel] = useState<Invoice | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => { fetchInvoices() }, [filterClient])
   useEffect(() => {
-    const saved = localStorage.getItem('inv_colors')
-    if (saved) setInvColors(JSON.parse(saved))
+    try { const s = localStorage.getItem('inv_colors'); if (s) setInvColors(JSON.parse(s)) } catch { /* ignore */ }
   }, [])
 
-  function saveColor(invId: string, idx: number) {
-    const next = { ...invColors, [invId]: idx }
+  function saveColor(id: string, idx: number) {
+    const next = { ...invColors, [id]: idx }
     setInvColors(next)
-    localStorage.setItem('inv_colors', JSON.stringify(next))
-    setColorPicker(null)
+    try { localStorage.setItem('inv_colors', JSON.stringify(next)) } catch { /* ignore */ }
   }
 
   async function fetchInvoices() {
     setLoading(true)
-    let q = supabase
-      .from('invoices')
-      .select('*, clients(*), invoice_items(*)')
-      .order('invoice_no', { ascending: false })
+    let q = supabase.from('invoices').select('*, clients(*), invoice_items(*)').order('invoice_no', { ascending: false })
     if (filterClient) q = q.eq('client_id', filterClient.id)
     const { data } = await q
     if (data) setInvoices(data as Invoice[])
@@ -52,59 +79,76 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
 
   const filtered = invoices.filter(inv => {
     const s = search.toLowerCase()
-    return (
-      inv.clients?.name?.toLowerCase().includes(s) ||
-      String(inv.invoice_no).includes(s) ||
-      inv.date.includes(s)
-    )
+    return inv.clients?.name?.toLowerCase().includes(s) || String(inv.invoice_no).includes(s) || inv.date.includes(s)
   })
 
-  async function handleDownload(inv: Invoice) {
-    setPdfLoading(true)
+  async function run(kind: 'share' | 'download', inv: Invoice) {
+    setBusy(kind)
     try {
-      const { downloadInvoicePDF } = await import('../utils/pdfExport')
-      await downloadInvoicePDF(inv)
-    } catch(e) { alert('Could not generate PDF') }
-    setPdfLoading(false)
+      const m = await import('../utils/pdfExport')
+      if (kind === 'share') await m.shareInvoicePDF(inv)
+      else await m.downloadInvoicePDF(inv)
+    } catch { alert('Could not create the PDF. Please try again.') }
+    setBusy('')
   }
 
-  async function handleShare(inv: Invoice) {
-    setPdfLoading(true)
-    try {
-      const { shareInvoicePDF } = await import('../utils/pdfExport')
-      await shareInvoicePDF(inv)
-    } catch(e) { alert('Could not share PDF') }
-    setPdfLoading(false)
+  async function doDelete() {
+    if (!confirmDel) return
+    setDeleting(true)
+    await supabase.from('invoice_items').delete().eq('invoice_id', confirmDel.id)
+    const { error } = await supabase.from('invoices').delete().eq('id', confirmDel.id)
+    setDeleting(false)
+    if (error) { alert('Could not delete invoice'); return }
+    setConfirmDel(null)
+    setSelected(null)
+    fetchInvoices()
   }
 
-  // Detail view
+  const confirmModal = confirmDel && (
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
+        <div>
+          <h3 className="font-bold text-lg">Delete invoice #{String(confirmDel.invoice_no).padStart(2, '0')}?</h3>
+          <p className="text-sm text-slate-500 mt-1">{confirmDel.clients?.name} · ₹{confirmDel.total.toLocaleString('en-IN')}. This cannot be undone.</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => setConfirmDel(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 font-semibold text-slate-600">Cancel</button>
+          <button onClick={doDelete} disabled={deleting} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold flex items-center justify-center">
+            {deleting ? <Loader size={18} className="animate-spin" /> : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (selected) {
     return (
       <div className="flex flex-col h-full">
-        {/* Header */}
-        <div className="flex items-center gap-2 p-3 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <button onClick={() => setSelected(null)} className="p-2 rounded-xl bg-gray-50">
-            <ArrowLeft size={18} className="text-gray-500" />
+        <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-slate-200 bg-white">
+          <button onClick={() => setSelected(null)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200">
+            <ArrowLeft size={18} className="text-slate-600" />
           </button>
-          <h2 className="font-bold flex-1 text-sm">Invoice #{String(selected.invoice_no).padStart(2,'0')}</h2>
-          <button onClick={() => { setEditInvoice(selected); setSelected(null) }}
-            className="p-2 bg-blue-50 rounded-xl"><Pencil size={16} className="text-blue-500" /></button>
-          <button onClick={() => handleShare(selected)} disabled={pdfLoading}
-            className="p-2 bg-green-50 rounded-xl">
-            {pdfLoading ? <Loader size={16} className="text-green-600 animate-spin" /> : <Share2 size={16} className="text-green-600" />}
-          </button>
-          <button onClick={() => handleDownload(selected)} disabled={pdfLoading}
-            className="p-2 bg-orange-50 rounded-xl">
-            {pdfLoading ? <Loader size={16} className="text-orange-500 animate-spin" /> : <Download size={16} className="text-orange-500" />}
-          </button>
-        </div>
-
-        {/* Invoice scaled to fit screen */}
-        <div className="flex-1 overflow-auto bg-gray-100 p-3">
-          <div style={{ transform: 'scale(0.42)', transformOrigin: 'top left', width: '238%' }}>
-            <InvoicePrint invoice={selected} />
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-sm md:text-base truncate">Invoice #{String(selected.invoice_no).padStart(2, '0')}</h2>
+            <p className="text-xs text-slate-400 truncate">{selected.clients?.name}</p>
           </div>
+          <button onClick={() => { setEditInvoice(selected); setSelected(null) }} title="Edit"
+            className="p-2.5 bg-blue-50 hover:bg-blue-100 rounded-xl"><Pencil size={16} className="text-blue-600" /></button>
+          <button onClick={() => setConfirmDel(selected)} title="Delete"
+            className="p-2.5 bg-red-50 hover:bg-red-100 rounded-xl"><Trash2 size={16} className="text-red-500" /></button>
+          <button onClick={() => run('share', selected)} disabled={!!busy}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-green-500 text-white rounded-xl text-sm font-semibold disabled:opacity-60">
+            {busy === 'share' ? <Loader size={16} className="animate-spin" /> : <Share2 size={16} />}<span className="hidden sm:inline">Share</span>
+          </button>
+          <button onClick={() => run('download', selected)} disabled={!!busy}
+            className="flex items-center gap-1.5 px-3 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold disabled:opacity-60">
+            {busy === 'download' ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}<span className="hidden sm:inline">Download</span>
+          </button>
         </div>
+        <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8">
+          <Preview invoice={selected} />
+        </div>
+        {confirmModal}
       </div>
     )
   }
@@ -112,83 +156,113 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   return (
     <div className="flex flex-col h-full">
       {filterClient && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-orange-50 border-b border-orange-100">
-          <span className="text-sm font-medium text-orange-700 flex-1">Invoices: {filterClient.name}</span>
+        <div className="flex items-center gap-2 px-4 md:px-8 py-2 bg-orange-50 border-b border-orange-100">
+          <span className="text-sm font-medium text-orange-700 flex-1 truncate">Invoices: {filterClient.name}</span>
           <button onClick={onClearFilter}><X size={16} className="text-orange-500" /></button>
         </div>
       )}
 
-      <div className="p-4 space-y-3">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-3 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search by client, invoice no..."
-            className="w-full border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-orange-400" />
+      <div className="px-4 md:px-8 pt-4 md:pt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:items-center">
+        <h1 className="hidden md:block text-2xl font-extrabold mr-auto">Invoices</h1>
+        <div className="relative sm:w-72">
+          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search client, invoice no..."
+            className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-orange-400" />
         </div>
-        <button onClick={() => setShowForm(true)}
-          className="w-full flex items-center justify-center gap-2 bg-orange-500 text-white font-semibold py-3 rounded-xl">
+        <button onClick={() => setShowType(true)}
+          className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl">
           <Plus size={18} /> New Invoice
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-6">
         {loading ? (
           <div className="flex justify-center py-12"><Loader className="animate-spin text-orange-400" /></div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 text-sm">No invoices yet</div>
-        ) : filtered.map(inv => {
-          const colorIdx = invColors[inv.id] ?? 0
-          const color = COLORS[colorIdx]
-          return (
-            <div key={inv.id} className="relative">
-              <button onClick={() => setSelected(inv)}
-                className="w-full bg-white border border-gray-100 rounded-2xl p-4 shadow-sm text-left active:scale-[0.98] transition-transform">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${color.bg} ${color.text}`}>
-                      #{String(inv.invoice_no).padStart(2,'0')}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate text-sm">{inv.clients?.name}</p>
-                      <p className="text-xs text-gray-400">{new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_items?.length || 0} item(s)</p>
+          <div className="text-center py-16 text-slate-400 text-sm">
+            <Receipt className="mx-auto mb-2 text-slate-300" size={36} />No invoices yet
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map(inv => {
+              const idx = invColors[inv.id] ?? 0
+              const color = COLORS[idx]
+              const ng = inv.invoice_type === 'nongst'
+              return (
+                <div key={inv.id} onClick={() => setSelected(inv)}
+                  className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${color.bg} ${color.text}`}>
+                        #{String(inv.invoice_no).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 truncate text-sm">{inv.clients?.name}</p>
+                        <p className="text-xs text-slate-400 truncate">
+                          {new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_items?.length || 0} item(s)
+                          {ng && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name || 'Non-GST'}</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-bold text-orange-600 text-sm">₹{inv.total.toLocaleString('en-IN')}</span>
+                      <ChevronRight size={14} className="text-slate-300" />
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                    <span className="font-bold text-orange-600 text-sm">₹{inv.total.toLocaleString('en-IN')}</span>
-                    <ChevronRight size={14} className="text-gray-300" />
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-50">
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      {COLORS.map((c, i) => (
+                        <button key={i} onClick={() => saveColor(inv.id, i)} aria-label="label colour"
+                          className={`w-5 h-5 rounded-full ${c.dot} ${idx === i ? 'ring-2 ring-offset-1 ring-slate-500' : 'opacity-50'}`} />
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setEditInvoice(inv)} className="flex items-center gap-1 text-xs text-slate-500 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg">
+                        <Pencil size={12} /> Edit
+                      </button>
+                      <button onClick={() => setConfirmDel(inv)} className="flex items-center gap-1 text-xs text-red-500 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg">
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {/* Bottom row: color + edit */}
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-50">
-                  {/* Color swatches */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-400 mr-1">Label:</span>
-                    {COLORS.map((c, idx) => (
-                      <button key={idx}
-                        onClick={e => { e.stopPropagation(); saveColor(inv.id, idx) }}
-                        className={`w-5 h-5 rounded-full transition-all ${c.dot} ${colorIdx === idx ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'opacity-60'}`}
-                      />
-                    ))}
-                  </div>
-                  <button onClick={e => { e.stopPropagation(); setEditInvoice(inv) }}
-                    className="flex items-center gap-1 text-xs text-gray-400 bg-gray-50 px-2.5 py-1.5 rounded-lg">
-                    <Pencil size={12} /> Edit
-                  </button>
-                </div>
-              </button>
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        )}
       </div>
+
+      {/* GST / Non-GST chooser */}
+      {showType && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setShowType(false)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">New invoice</h2>
+              <button onClick={() => setShowType(false)}><X size={20} className="text-slate-400" /></button>
+            </div>
+            <button onClick={() => { setNewType('gst'); setShowType(false); setShowForm(true) }}
+              className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center"><FileText className="text-orange-600" size={22} /></div>
+              <div><p className="font-bold">GST Invoice</p><p className="text-xs text-slate-500">Tax invoice · Pankti Engineering · CGST/SGST/IGST</p></div>
+            </button>
+            <button onClick={() => { setNewType('nongst'); setShowType(false); setShowForm(true) }}
+              className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center"><Receipt className="text-slate-600" size={22} /></div>
+              <div><p className="font-bold">Non-GST Invoice</p><p className="text-xs text-slate-500">Simple invoice · choose or edit company name, address, phone</p></div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {(showForm || editInvoice) && (
         <NewInvoiceForm
           preClient={filterClient}
           editInvoice={editInvoice || undefined}
+          invoiceType={editInvoice ? (editInvoice.invoice_type === 'nongst' ? 'nongst' : 'gst') : newType}
           onDone={() => { setShowForm(false); setEditInvoice(null); fetchInvoices() }}
         />
       )}
+      {confirmModal}
     </div>
   )
 }

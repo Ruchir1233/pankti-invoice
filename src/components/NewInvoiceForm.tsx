@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Client, InvoiceItem, Invoice } from '../lib/supabase'
+import type { Client, InvoiceItem, Invoice, Company } from '../lib/supabase'
 import { Plus, Trash2, X, Loader, ChevronDown } from 'lucide-react'
 
 const emptyItem = (): InvoiceItem => ({ particulars: '', hsn_code: '', qty: 1, rate: 0, amount: 0 })
 
 export default function NewInvoiceForm({
-  onDone, preClient, editInvoice
+  onDone, preClient, editInvoice, invoiceType = 'gst'
 }: {
+  invoiceType?: 'gst' | 'nongst'
   onDone: () => void
   preClient?: Client
   editInvoice?: Invoice
@@ -28,8 +29,15 @@ export default function NewInvoiceForm({
     editInvoice?.invoice_items?.length ? editInvoice.invoice_items : [emptyItem()]
   )
   const [saving, setSaving] = useState(false)
+  const nonGst = invoiceType === 'nongst'
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [coName, setCoName] = useState(editInvoice?.company_name || '')
+  const [coAddress, setCoAddress] = useState(editInvoice?.company_address || '')
+  const [coPhone, setCoPhone] = useState(editInvoice?.company_phone || '')
+  const [saveCo, setSaveCo] = useState(true)
 
   useEffect(() => {
+    if (nonGst) supabase.from('companies').select('*').order('name').then(({ data }) => { if (data) setCompanies(data as Company[]) })
     supabase.from('clients').select('*').order('name').then(({ data }) => {
       if (data) setClients(data)
     })
@@ -53,7 +61,7 @@ export default function NewInvoiceForm({
   }
 
   const subtotal = items.reduce((s, i) => s + (i.amount || 0), 0)
-  const taxAmount = gstType === 'cgst_sgst'
+  const taxAmount = nonGst ? 0 : gstType === 'cgst_sgst'
     ? subtotal * (cgstRate + sgstRate) / 100
     : subtotal * igstRate / 100
   const total = subtotal + taxAmount
@@ -62,7 +70,11 @@ export default function NewInvoiceForm({
     if (!clientId) return alert('Please select a client')
     if (items.every(i => !i.particulars.trim())) return alert('Add at least one item')
     if (!invoiceNo) return alert('Invoice number is required')
+    if (nonGst && !coName.trim()) return alert('Enter the company name')
     setSaving(true)
+    if (nonGst && saveCo && !companies.some(c => c.name.trim().toLowerCase() === coName.trim().toLowerCase())) {
+      await supabase.from('companies').insert([{ name: coName.trim(), address: coAddress.trim(), phone: coPhone.trim() }])
+    }
 
     const payload = {
       client_id: clientId,
@@ -70,9 +82,13 @@ export default function NewInvoiceForm({
       date,
       mode_of_delivery: modeOfDelivery,
       vehicle_no: vehicleNo,
-      cgst_rate: gstType === 'cgst_sgst' ? cgstRate : 0,
-      sgst_rate: gstType === 'cgst_sgst' ? sgstRate : 0,
-      igst_rate: gstType === 'igst' ? igstRate : 0,
+      invoice_type: invoiceType,
+      company_name: nonGst ? coName.trim() : null,
+      company_address: nonGst ? coAddress.trim() : null,
+      company_phone: nonGst ? coPhone.trim() : null,
+      cgst_rate: !nonGst && gstType === 'cgst_sgst' ? cgstRate : 0,
+      sgst_rate: !nonGst && gstType === 'cgst_sgst' ? sgstRate : 0,
+      igst_rate: !nonGst && gstType === 'igst' ? igstRate : 0,
       subtotal,
       tax_amount: taxAmount,
       total,
@@ -81,7 +97,8 @@ export default function NewInvoiceForm({
     let invId = editInvoice?.id
 
     if (editInvoice) {
-      await supabase.from('invoices').update(payload).eq('id', editInvoice.id)
+      const { error: ue } = await supabase.from('invoices').update(payload).eq('id', editInvoice.id)
+      if (ue) { alert('Error updating invoice'); setSaving(false); return }
       await supabase.from('invoice_items').delete().eq('invoice_id', editInvoice.id)
     } else {
       const { data: inv, error } = await supabase.from('invoices').insert([payload]).select().single()
@@ -105,14 +122,40 @@ export default function NewInvoiceForm({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-      <div className="bg-white w-full rounded-t-2xl max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[95dvh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-5 py-4 z-10">
-          <h2 className="text-lg font-bold">{editInvoice ? 'Edit Invoice' : 'New Invoice'}</h2>
+          <h2 className="text-lg font-bold">{editInvoice ? 'Edit' : 'New'} {nonGst ? 'Non-GST' : 'GST'} Invoice</h2>
           <button onClick={onDone}><X size={20} className="text-gray-400" /></button>
         </div>
 
         <div className="p-5 space-y-4">
+          {nonGst && (
+            <div className="bg-slate-50 rounded-xl p-3 space-y-2.5">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Your company (shown in header)</p>
+              {companies.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {companies.map(c => (
+                    <button key={c.id} type="button"
+                      onClick={() => { setCoName(c.name); setCoAddress(c.address || ''); setCoPhone(c.phone || '') }}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border ${coName === c.name ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-600 border-slate-200'}`}>
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input value={coName} onChange={e => setCoName(e.target.value)} placeholder="Company name *"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white outline-none focus:border-orange-400" />
+              <textarea value={coAddress} onChange={e => setCoAddress(e.target.value)} placeholder="Company address" rows={2}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white outline-none focus:border-orange-400 resize-none" />
+              <input value={coPhone} onChange={e => setCoPhone(e.target.value)} placeholder="Phone"
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm bg-white outline-none focus:border-orange-400" />
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <input type="checkbox" checked={saveCo} onChange={e => setSaveCo(e.target.checked)} /> Save this company to my list
+              </label>
+            </div>
+          )}
+
           {/* Client */}
           <div>
             <label className="text-xs font-semibold text-gray-500 block mb-1">Client *</label>
@@ -157,6 +200,8 @@ export default function NewInvoiceForm({
             </div>
           </div>
 
+          {!nonGst && (
+          <>
           {/* GST Type */}
           <div>
             <label className="text-xs font-semibold text-gray-500 block mb-2">GST Type</label>
@@ -191,6 +236,8 @@ export default function NewInvoiceForm({
               </div>
             )}
           </div>
+          </>
+          )}
 
           {/* Items */}
           <div>
@@ -247,7 +294,7 @@ export default function NewInvoiceForm({
           {/* Totals */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
             <div className="flex justify-between text-gray-600"><span>Sub Total</span><span>₹{subtotal.toLocaleString('en-IN')}</span></div>
-            <div className="flex justify-between text-gray-600"><span>Tax (GST)</span><span>₹{taxAmount.toLocaleString('en-IN')}</span></div>
+            {!nonGst && <div className="flex justify-between text-gray-600"><span>Tax (GST)</span><span>₹{taxAmount.toLocaleString('en-IN')}</span></div>}
             <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
               <span>Total</span><span className="text-orange-600">₹{total.toLocaleString('en-IN')}</span>
             </div>
