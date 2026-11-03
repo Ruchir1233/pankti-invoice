@@ -6,6 +6,7 @@ import NewInvoiceForm from './NewInvoiceForm'
 import UploadInvoiceForm from './UploadInvoiceForm'
 import InvoicePrint from './InvoicePrint'
 import { useBackClose } from '../utils/useBackClose'
+import * as pdf from '../utils/pdfExport'
 
 const TYPES = {
   gst: { label: 'GST', cls: 'bg-orange-100 text-orange-700', bar: 'border-l-orange-400' },
@@ -84,11 +85,11 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     setBusy(kind)
     await new Promise(r => setTimeout(r, 150))
     try {
-      const m = await import('../utils/pdfExport')
+      const m = pdf
       const up = inv.invoice_type === 'upload'
       if (kind === 'share') await (up ? m.shareUploaded(inv) : m.shareInvoicePDF(inv))
       else await (up ? m.downloadUploaded(inv) : m.downloadInvoicePDF(inv))
-    } catch { alert('Could not create the PDF. Please try again.') }
+    } catch (e) { alert('Could not create the file: ' + ((e as Error)?.message || e)) }
     setBusy('')
   }
 
@@ -123,6 +124,26 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         </div>
       </div>
     </div>
+  )
+
+  const formModals = (
+    <>
+      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) === 'upload') && (
+        <UploadInvoiceForm
+          preClient={filterClient}
+          editInvoice={editInvoice || undefined}
+          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
+        />
+      )}
+      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) !== 'upload') && (
+        <NewInvoiceForm
+          preClient={filterClient}
+          editInvoice={editInvoice || undefined}
+          invoiceType={(editInvoice ? editInvoice.invoice_type === 'nongst' : newType === 'nongst') ? 'nongst' : 'gst'}
+          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
+        />
+      )}
+    </>
   )
 
   if (selected) {
@@ -177,6 +198,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           )}
         </div>
         {confirmModal}
+        {formModals}
       </div>
     )
   }
@@ -293,21 +315,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         </div>
       )}
 
-      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) === 'upload') && (
-        <UploadInvoiceForm
-          preClient={filterClient}
-          editInvoice={editInvoice || undefined}
-          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
-        />
-      )}
-      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) !== 'upload') && (
-        <NewInvoiceForm
-          preClient={filterClient}
-          editInvoice={editInvoice || undefined}
-          invoiceType={(editInvoice ? editInvoice.invoice_type === 'nongst' : newType === 'nongst') ? 'nongst' : 'gst'}
-          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
-        />
-      )}
+      {formModals}
       {confirmModal}
     </div>
   )
