@@ -49,6 +49,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'gst' | 'nongst' | 'upload'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null)
   const [selected, setSelected] = useState<Invoice | null>(null)
@@ -75,6 +76,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
 
   const filtered = invoices.filter(inv => {
     const s = search.toLowerCase()
+    if (typeFilter !== 'all' && (inv.invoice_type || 'gst') !== typeFilter) return false
     return inv.clients?.name?.toLowerCase().includes(s) || String(inv.invoice_no).includes(s) || inv.date.includes(s)
   })
 
@@ -199,6 +201,18 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl">
           <Plus size={18} /> New Invoice
         </button>
+      </div>
+
+      <div className="px-4 md:px-8 pb-3 flex gap-2 overflow-x-auto">
+        {([['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST'], ['upload', 'Uploaded']] as const).map(([k, label]) => {
+          const n = k === 'all' ? invoices.length : invoices.filter(i => (i.invoice_type || 'gst') === k).length
+          return (
+            <button key={k} onClick={() => setTypeFilter(k)}
+              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-semibold border ${typeFilter === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
+              {label} <span className="opacity-60 text-xs">{n}</span>
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-6">

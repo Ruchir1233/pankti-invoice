@@ -25,6 +25,7 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
         <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', margin: 0 }}>{gst ? 'TAX INVOICE' : 'INVOICE'}</p>
         <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '2px', margin: '4px 0' }}>{coName}</h1>
         <p style={{ fontSize: '11px', margin: 0, whiteSpace: 'pre-wrap' }}>{[coAddress, coPhone && `Phone No.: ${coPhone}`].filter(Boolean).join('  |  ')}</p>
+        {gst && <p style={{ fontSize: '12px', fontWeight: 700, margin: '4px 0 0' }}>GSTIN : 24AIFPP7184F1Z3</p>}
       </div>
 
       {/* Client + Invoice */}
@@ -116,7 +117,7 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '16px', paddingTop: '8px', borderTop: '1px solid black' }}>
-        <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>{gst ? 'GSTIN : 24AIFPP7184F1Z3' : ''}</p>
+        <span />
         <div style={{ textAlign: 'center' }}>
           <p style={{ fontSize: '11px', fontWeight: 700, margin: 0 }}>For {coName}</p>
           <div style={{ height: '50px' }}></div>
