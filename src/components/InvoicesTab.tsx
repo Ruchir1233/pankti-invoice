@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Invoice, Client } from '../lib/supabase'
-import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText } from 'lucide-react'
+import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText, Upload, ExternalLink } from 'lucide-react'
 import NewInvoiceForm from './NewInvoiceForm'
+import UploadInvoiceForm from './UploadInvoiceForm'
 import InvoicePrint from './InvoicePrint'
 import { useBackClose } from '../utils/useBackClose'
 
@@ -56,7 +57,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [invColors, setInvColors] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<'' | 'share' | 'download'>('')
   const [showType, setShowType] = useState(false)
-  const [newType, setNewType] = useState<'gst' | 'nongst'>('gst')
+  const [newType, setNewType] = useState<'gst' | 'nongst' | 'upload'>('gst')
   const [confirmDel, setConfirmDel] = useState<Invoice | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -95,8 +96,9 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     await new Promise(r => setTimeout(r, 150))
     try {
       const m = await import('../utils/pdfExport')
-      if (kind === 'share') await m.shareInvoicePDF(inv)
-      else await m.downloadInvoicePDF(inv)
+      const up = inv.invoice_type === 'upload'
+      if (kind === 'share') await (up ? m.shareUploaded(inv) : m.shareInvoicePDF(inv))
+      else await (up ? m.downloadUploaded(inv) : m.downloadInvoicePDF(inv))
     } catch { alert('Could not create the PDF. Please try again.') }
     setBusy('')
   }
@@ -104,6 +106,10 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   async function doDelete() {
     if (!confirmDel) return
     setDeleting(true)
+    if (confirmDel.file_url) {
+      const path = confirmDel.file_url.split('/invoice-files/')[1]
+      if (path) await supabase.storage.from('invoice-files').remove([path])
+    }
     await supabase.from('invoice_items').delete().eq('invoice_id', confirmDel.id)
     const { error } = await supabase.from('invoices').delete().eq('id', confirmDel.id)
     setDeleting(false)
@@ -155,7 +161,31 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           </button>
         </div>
         <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8">
-          <Preview invoice={selected} capturing={!!busy} />
+          {selected.invoice_type === 'upload' ? (
+            <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold truncate">{selected.clients?.name}</p>
+                  <p className="text-xs text-slate-400">{new Date(selected.date).toLocaleDateString('en-IN')} · Uploaded invoice</p>
+                </div>
+                <p className="font-bold text-orange-600">₹{selected.total.toLocaleString('en-IN')}</p>
+              </div>
+              {selected.file_type?.startsWith('image/') ? (
+                <img src={selected.file_url!} alt="Invoice" className="w-full rounded-xl border border-slate-100" />
+              ) : (
+                <div className="border border-slate-100 rounded-xl p-6 text-center space-y-3">
+                  <FileText className="mx-auto text-orange-500" size={36} />
+                  <p className="text-sm text-slate-600 break-all">{selected.file_name}</p>
+                </div>
+              )}
+              <a href={selected.file_url!} target="_blank" rel="noreferrer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-slate-100 text-sm font-semibold text-slate-700">
+                <ExternalLink size={16} /> Open file
+              </a>
+            </div>
+          ) : (
+            <Preview invoice={selected} capturing={!!busy} />
+          )}
         </div>
         {confirmModal}
       </div>
@@ -208,8 +238,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900 truncate text-sm">{inv.clients?.name}</p>
                         <p className="text-xs text-slate-400 truncate">
-                          {new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_items?.length || 0} item(s)
-                          {ng && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name || 'Non-GST'}</span>}
+                          {new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_type === 'upload' ? 'file' : `${inv.invoice_items?.length || 0} item(s)`}
+                          {inv.invoice_type === 'upload' ? <span className="ml-1.5 text-slate-500 font-semibold">· Uploaded</span> : ng && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name || 'Non-GST'}</span>}
                         </p>
                       </div>
                     </div>
@@ -259,15 +289,27 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
               <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center"><Receipt className="text-slate-600" size={22} /></div>
               <div><p className="font-bold">Non-GST Invoice</p><p className="text-xs text-slate-500">Simple invoice · choose or edit company name, address, phone</p></div>
             </button>
+            <button onClick={() => { setNewType('upload'); setShowType(false); setShowForm(true) }}
+              className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center"><Upload className="text-blue-600" size={22} /></div>
+              <div><p className="font-bold">Upload Invoice</p><p className="text-xs text-slate-500">Add a PDF or photo made in another app</p></div>
+            </button>
           </div>
         </div>
       )}
 
-      {(showForm || editInvoice) && (
+      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) === 'upload') && (
+        <UploadInvoiceForm
+          preClient={filterClient}
+          editInvoice={editInvoice || undefined}
+          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
+        />
+      )}
+      {(showForm || editInvoice) && ((editInvoice ? editInvoice.invoice_type : newType) !== 'upload') && (
         <NewInvoiceForm
           preClient={filterClient}
           editInvoice={editInvoice || undefined}
-          invoiceType={editInvoice ? (editInvoice.invoice_type === 'nongst' ? 'nongst' : 'gst') : newType}
+          invoiceType={(editInvoice ? editInvoice.invoice_type === 'nongst' : newType === 'nongst') ? 'nongst' : 'gst'}
           onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
         />
       )}

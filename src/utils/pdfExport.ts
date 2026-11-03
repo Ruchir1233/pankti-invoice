@@ -65,3 +65,28 @@ export async function shareInvoicePDF(invoice: Invoice) {
   saveBlob(blob, name)
   setTimeout(() => window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n\n(PDF downloaded — attach it here)')}`, '_blank'), 600)
 }
+
+async function fetchUploaded(invoice: Invoice) {
+  const res = await fetch(invoice.file_url!)
+  const blob = await res.blob()
+  const ext = invoice.file_type?.includes('pdf') ? 'pdf' : (invoice.file_type?.split('/')[1] || 'jpg')
+  const client = (invoice.clients?.name || 'client').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
+  const name = `Invoice_${String(invoice.invoice_no).padStart(2, '0')}_${client}.${ext}`
+  return { blob, name, type: invoice.file_type || blob.type }
+}
+
+export async function downloadUploaded(invoice: Invoice) {
+  const { blob, name } = await fetchUploaded(invoice)
+  saveBlob(blob, name)
+}
+
+export async function shareUploaded(invoice: Invoice) {
+  const { blob, name, type } = await fetchUploaded(invoice)
+  const file = new File([blob], name, { type })
+  const text = `Invoice No: ${String(invoice.invoice_no).padStart(2, '0')}\nTotal: ₹${invoice.total.toLocaleString('en-IN')}`
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name, text }); return } catch (e) { if ((e as Error).name === 'AbortError') return }
+  }
+  saveBlob(blob, name)
+  setTimeout(() => window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n\n(File downloaded — attach it here)')}`, '_blank'), 600)
+}

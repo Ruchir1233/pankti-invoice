@@ -39,7 +39,10 @@ export type Invoice = {
   tax_amount: number
   total: number
   created_at: string
-  invoice_type?: 'gst' | 'nongst'
+  invoice_type?: 'gst' | 'nongst' | 'upload'
+  file_url?: string | null
+  file_name?: string | null
+  file_type?: string | null
   company_name?: string | null
   company_address?: string | null
   company_phone?: string | null
