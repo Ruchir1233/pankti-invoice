@@ -7,14 +7,12 @@ import UploadInvoiceForm from './UploadInvoiceForm'
 import InvoicePrint from './InvoicePrint'
 import { useBackClose } from '../utils/useBackClose'
 
-const COLORS = [
-  { bg: 'bg-orange-100', text: 'text-orange-700', dot: 'bg-orange-400' },
-  { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-400' },
-  { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-400' },
-  { bg: 'bg-purple-100', text: 'text-purple-700', dot: 'bg-purple-400' },
-  { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-400' },
-  { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-400' },
-]
+const TYPES = {
+  gst: { label: 'GST', cls: 'bg-orange-100 text-orange-700', bar: 'border-l-orange-400' },
+  nongst: { label: 'Non-GST', cls: 'bg-blue-100 text-blue-700', bar: 'border-l-blue-400' },
+  upload: { label: 'Uploaded', cls: 'bg-purple-100 text-purple-700', bar: 'border-l-purple-400' },
+} as const
+
 const SHEET_PX = 793.7 // 210mm at 96dpi
 
 function Preview({ invoice, capturing }: { invoice: Invoice; capturing: boolean }) {
@@ -54,7 +52,6 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [showForm, setShowForm] = useState(false)
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null)
   const [selected, setSelected] = useState<Invoice | null>(null)
-  const [invColors, setInvColors] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<'' | 'share' | 'download'>('')
   const [showType, setShowType] = useState(false)
   const [newType, setNewType] = useState<'gst' | 'nongst' | 'upload'>('gst')
@@ -67,16 +64,6 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   useBackClose(!!confirmDel, () => setConfirmDel(null))
 
   useEffect(() => { fetchInvoices() }, [filterClient])
-  useEffect(() => {
-    try { const s = localStorage.getItem('inv_colors'); if (s) setInvColors(JSON.parse(s)) } catch { /* ignore */ }
-  }, [])
-
-  function saveColor(id: string, idx: number) {
-    const next = { ...invColors, [id]: idx }
-    setInvColors(next)
-    try { localStorage.setItem('inv_colors', JSON.stringify(next)) } catch { /* ignore */ }
-  }
-
   async function fetchInvoices() {
     setLoading(true)
     let q = supabase.from('invoices').select('*, clients(*), invoice_items(*)').order('invoice_no', { ascending: false })
@@ -224,22 +211,22 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         ) : (
           <div className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-3">
             {filtered.map(inv => {
-              const idx = invColors[inv.id] ?? 0
-              const color = COLORS[idx]
               const ng = inv.invoice_type === 'nongst'
+              const t = TYPES[(inv.invoice_type as keyof typeof TYPES) || 'gst'] || TYPES.gst
               return (
                 <div key={inv.id} onClick={() => setSelected(inv)}
-                  className="min-w-0 bg-white border border-slate-100 rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow">
+                  className={`min-w-0 bg-white border border-slate-100 border-l-4 ${t.bar} rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${color.bg} ${color.text}`}>
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${t.cls}`}>
                         #{String(inv.invoice_no).padStart(2, '0')}
                       </span>
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900 truncate text-sm">{inv.clients?.name}</p>
+                        <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${t.cls}`}>{t.label}</span>
                         <p className="text-xs text-slate-400 truncate">
                           {new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_type === 'upload' ? 'file' : `${inv.invoice_items?.length || 0} item(s)`}
-                          {inv.invoice_type === 'upload' ? <span className="ml-1.5 text-slate-500 font-semibold">· Uploaded</span> : ng && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name || 'Non-GST'}</span>}
+                          {ng && inv.company_name && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name}</span>}
                         </p>
                       </div>
                     </div>
@@ -248,13 +235,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                       <ChevronRight size={14} className="text-slate-300" />
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-50">
-                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                      {COLORS.map((c, i) => (
-                        <button key={i} onClick={() => saveColor(inv.id, i)} aria-label="label colour"
-                          className={`w-5 h-5 rounded-full ${c.dot} ${idx === i ? 'ring-2 ring-offset-1 ring-slate-500' : 'opacity-50'}`} />
-                      ))}
-                    </div>
+                  <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-50">
                     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setEditInvoice(inv)} className="flex items-center gap-1 text-xs text-slate-500 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg">
                         <Pencil size={12} /> Edit
