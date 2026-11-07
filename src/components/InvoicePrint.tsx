@@ -1,5 +1,6 @@
 import { docNo, validTill } from '../utils/docNo'
 import type { Invoice } from '../lib/supabase'
+import EstimatePrint from './EstimatePrint'
 import { numberToWords } from '../utils/numberToWords'
 
 export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoice: Invoice; id?: string }) {
@@ -11,6 +12,7 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
   const coPhone = gst ? '9879523937' : (invoice.company_phone || '')
   const items = invoice.invoice_items || []
   const emptyRows = Math.max(0, 8 - items.length)
+  if (est) return <EstimatePrint invoice={invoice} id={id} />
 
   return (
     <div id={id} className="invoice-sheet bg-white text-black" style={{
