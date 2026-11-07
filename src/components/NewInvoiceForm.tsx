@@ -6,34 +6,40 @@ import { Plus, Trash2, X, Loader, ChevronDown } from 'lucide-react'
 const emptyItem = (): InvoiceItem => ({ particulars: '', hsn_code: '', qty: 1, rate: 0, amount: 0 })
 
 export default function NewInvoiceForm({
-  onDone, preClient, editInvoice, invoiceType = 'gst'
+  onDone, preClient, editInvoice, convertFrom, estimate: estimateProp = false, invoiceType = 'gst'
 }: {
+  estimate?: boolean
+  convertFrom?: Invoice
   invoiceType?: 'gst' | 'nongst'
   onDone: () => void
   preClient?: Client
   editInvoice?: Invoice
 }) {
+  const src = editInvoice || convertFrom
+  const estimate = editInvoice ? !!editInvoice.is_estimate : estimateProp
+  const [validDays, setValidDays] = useState(String(editInvoice?.valid_days || 15))
+  const [terms, setTerms] = useState(editInvoice?.terms || '')
   const [clients, setClients] = useState<Client[]>([])
-  const [clientId, setClientId] = useState(editInvoice?.client_id || preClient?.id || '')
+  const [clientId, setClientId] = useState(src?.client_id || preClient?.id || '')
   const [invoiceNo, setInvoiceNo] = useState<string>('')
   const [date, setDate] = useState(editInvoice?.date || new Date().toISOString().split('T')[0])
-  const [modeOfDelivery, setModeOfDelivery] = useState(editInvoice?.mode_of_delivery || '')
-  const [vehicleNo, setVehicleNo] = useState(editInvoice?.vehicle_no || '')
+  const [modeOfDelivery, setModeOfDelivery] = useState(src?.mode_of_delivery || '')
+  const [vehicleNo, setVehicleNo] = useState(src?.vehicle_no || '')
   const [gstType, setGstType] = useState<'cgst_sgst' | 'igst'>(
-    editInvoice ? (editInvoice.igst_rate > 0 ? 'igst' : 'cgst_sgst') : 'cgst_sgst'
+    src ? (src.igst_rate > 0 ? 'igst' : 'cgst_sgst') : 'cgst_sgst'
   )
-  const [cgstRate, setCgstRate] = useState(editInvoice?.cgst_rate ?? 9)
-  const [sgstRate, setSgstRate] = useState(editInvoice?.sgst_rate ?? 9)
-  const [igstRate, setIgstRate] = useState(editInvoice?.igst_rate ?? 18)
+  const [cgstRate, setCgstRate] = useState(src?.cgst_rate ?? 9)
+  const [sgstRate, setSgstRate] = useState(src?.sgst_rate ?? 9)
+  const [igstRate, setIgstRate] = useState(src?.igst_rate ?? 18)
   const [items, setItems] = useState<InvoiceItem[]>(
-    editInvoice?.invoice_items?.length ? editInvoice.invoice_items : [emptyItem()]
+    src?.invoice_items?.length ? src.invoice_items : [emptyItem()]
   )
   const [saving, setSaving] = useState(false)
   const nonGst = invoiceType === 'nongst'
   const [companies, setCompanies] = useState<Company[]>([])
-  const [coName, setCoName] = useState(editInvoice?.company_name || '')
-  const [coAddress, setCoAddress] = useState(editInvoice?.company_address || '')
-  const [coPhone, setCoPhone] = useState(editInvoice?.company_phone || '')
+  const [coName, setCoName] = useState(src?.company_name || '')
+  const [coAddress, setCoAddress] = useState(src?.company_address || '')
+  const [coPhone, setCoPhone] = useState(src?.company_phone || '')
   const [saveCo, setSaveCo] = useState(true)
 
   useEffect(() => {
@@ -45,7 +51,7 @@ export default function NewInvoiceForm({
     if (editInvoice) {
       setInvoiceNo(String(editInvoice.invoice_no))
     } else {
-      supabase.from('invoices').select('invoice_no').order('invoice_no', { ascending: false }).limit(1)
+      supabase.from('invoices').select('invoice_no').eq('is_estimate', estimate).order('invoice_no', { ascending: false }).limit(1)
         .then(({ data }) => setInvoiceNo(String(((data?.[0]?.invoice_no) || 0) + 1)))
     }
   }, [])
@@ -80,8 +86,12 @@ export default function NewInvoiceForm({
       client_id: clientId,
       invoice_no: Number(invoiceNo),
       date,
-      mode_of_delivery: modeOfDelivery,
-      vehicle_no: vehicleNo,
+      mode_of_delivery: estimate ? '' : modeOfDelivery,
+      vehicle_no: estimate ? '' : vehicleNo,
+      is_estimate: estimate,
+      valid_days: estimate ? Number(validDays) || 15 : null,
+      terms: estimate ? terms.trim() : null,
+      status: estimate ? (editInvoice?.status || 'open') : null,
       invoice_type: invoiceType,
       company_name: nonGst ? coName.trim() : null,
       company_address: nonGst ? coAddress.trim() : null,
@@ -104,6 +114,7 @@ export default function NewInvoiceForm({
       const { data: inv, error } = await supabase.from('invoices').insert([payload]).select().single()
       if (error) { alert('Error saving invoice'); setSaving(false); return }
       invId = inv.id
+      if (convertFrom) await supabase.from('invoices').update({ status: 'converted' }).eq('id', convertFrom.id)
     }
 
     const validItems = items.filter(i => i.particulars.trim())
@@ -125,7 +136,7 @@ export default function NewInvoiceForm({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[95dvh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-5 py-4 z-10">
-          <h2 className="text-lg font-bold">{editInvoice ? 'Edit' : 'New'} {nonGst ? 'Non-GST' : 'GST'} Invoice</h2>
+          <h2 className="text-lg font-bold">{editInvoice ? 'Edit' : convertFrom ? 'Convert to' : 'New'} {nonGst ? 'Non-GST' : 'GST'} {estimate ? 'Estimate' : 'Invoice'}</h2>
           <button onClick={onDone}><X size={20} className="text-gray-400" /></button>
         </div>
 
@@ -172,7 +183,7 @@ export default function NewInvoiceForm({
           {/* Invoice No + Date */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-500 block mb-1">Invoice No. *</label>
+              <label className="text-xs font-semibold text-gray-500 block mb-1">{estimate ? 'Estimate No.' : 'Invoice No.'} *</label>
               <input type="number" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)}
                 placeholder="1"
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
@@ -184,8 +195,23 @@ export default function NewInvoiceForm({
             </div>
           </div>
 
+          {estimate && (
+            <div className="grid grid-cols-[110px_1fr] gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Valid (days)</label>
+                <input type="number" value={validDays} onChange={e => setValidDays(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">Terms (optional)</label>
+                <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={2} placeholder="e.g. 50% advance, balance on delivery"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400 resize-none" />
+              </div>
+            </div>
+          )}
+
           {/* Mode + Vehicle */}
-          <div className="grid grid-cols-2 gap-3">
+          {!estimate && <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-gray-500 block mb-1">Mode of Delivery</label>
               <input value={modeOfDelivery} onChange={e => setModeOfDelivery(e.target.value)}
@@ -198,7 +224,7 @@ export default function NewInvoiceForm({
                 placeholder="GJ-01-AB-1234"
                 className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400" />
             </div>
-          </div>
+          </div>}
 
           {!nonGst && (
           <>

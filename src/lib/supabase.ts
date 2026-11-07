@@ -40,6 +40,10 @@ export type Invoice = {
   total: number
   created_at: string
   invoice_type?: 'gst' | 'nongst' | 'upload'
+  is_estimate?: boolean | null
+  valid_days?: number | null
+  terms?: string | null
+  status?: string | null
   file_url?: string | null
   file_name?: string | null
   file_type?: string | null

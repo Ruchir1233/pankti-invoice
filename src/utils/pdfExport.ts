@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import type { Invoice } from '../lib/supabase'
+import { docNo } from './docNo'
 
 // Renders the hidden full-size invoice (#invoice-pdf-source) into an A4 PDF blob.
 export async function generateInvoicePDF(): Promise<Blob> {
@@ -27,7 +28,7 @@ export async function generateInvoicePDF(): Promise<Blob> {
 
 function fileNameFor(invoice: Invoice) {
   const client = (invoice.clients?.name || 'client').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
-  return `Invoice_${String(invoice.invoice_no).padStart(2, '0')}_${client}.pdf`
+  return `${invoice.is_estimate ? 'Estimate' : 'Invoice'}_${docNo(invoice)}_${client}.pdf`
 }
 
 function saveBlob(blob: Blob, name: string) {
@@ -51,7 +52,7 @@ export async function shareInvoicePDF(invoice: Invoice) {
   const file = new File([blob], name, { type: 'application/pdf' })
   const gst = invoice.invoice_type !== 'nongst'
   const co = gst ? 'Pankti Engineering' : (invoice.company_name || 'Invoice')
-  const text = `Invoice No: ${String(invoice.invoice_no).padStart(2, '0')}\nDate: ${new Date(invoice.date).toLocaleDateString('en-IN')}\nTotal: ₹${invoice.total.toLocaleString('en-IN')}\n\n${co}`
+  const text = `${invoice.is_estimate ? 'Estimate' : 'Invoice'} No: ${docNo(invoice)}\nDate: ${new Date(invoice.date).toLocaleDateString('en-IN')}\nTotal: ₹${invoice.total.toLocaleString('en-IN')}\n\n${co}`
 
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {

@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Invoice, Client } from '../lib/supabase'
-import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText, Upload, ExternalLink } from 'lucide-react'
+import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText, Upload, ExternalLink, FileCheck } from 'lucide-react'
 import NewInvoiceForm from './NewInvoiceForm'
 import UploadInvoiceForm from './UploadInvoiceForm'
 import InvoicePrint from './InvoicePrint'
 import { useBackClose } from '../utils/useBackClose'
 import * as pdf from '../utils/pdfExport'
+import { docNo } from '../utils/docNo'
 
 const TYPES = {
   gst: { label: 'GST', cls: 'bg-orange-100 text-orange-700', bar: 'border-l-orange-400' },
   nongst: { label: 'Non-GST', cls: 'bg-blue-100 text-blue-700', bar: 'border-l-blue-400' },
+  estimate: { label: 'Estimate', cls: 'bg-green-100 text-green-700', bar: 'border-l-green-500' },
   upload: { label: 'Uploaded', cls: 'bg-purple-100 text-purple-700', bar: 'border-l-purple-400' },
 } as const
 
@@ -50,19 +52,21 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'gst' | 'nongst' | 'upload'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'gst' | 'nongst' | 'upload' | 'estimate'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null)
   const [selected, setSelected] = useState<Invoice | null>(null)
   const [busy, setBusy] = useState<'' | 'share' | 'download'>('')
   const [showType, setShowType] = useState(false)
   const [newType, setNewType] = useState<'gst' | 'nongst' | 'upload'>('gst')
+  const [newEstimate, setNewEstimate] = useState(false)
+  const [convertFrom, setConvertFrom] = useState<Invoice | null>(null)
   const [confirmDel, setConfirmDel] = useState<Invoice | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   useBackClose(!!selected, () => setSelected(null))
   useBackClose(showType, () => setShowType(false))
-  useBackClose(showForm || !!editInvoice, () => { setShowForm(false); setEditInvoice(null) })
+  useBackClose(showForm || !!editInvoice, () => { setShowForm(false); setEditInvoice(null); setConvertFrom(null) })
   useBackClose(!!confirmDel, () => setConfirmDel(null))
 
   useEffect(() => { fetchInvoices() }, [filterClient])
@@ -75,9 +79,12 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     setLoading(false)
   }
 
+  const matchType = (inv: Invoice, k: string) =>
+    k === 'all' ? true : k === 'estimate' ? !!inv.is_estimate : !inv.is_estimate && (inv.invoice_type || 'gst') === k
+
   const filtered = invoices.filter(inv => {
     const s = search.toLowerCase()
-    if (typeFilter !== 'all' && (inv.invoice_type || 'gst') !== typeFilter) return false
+    if (!matchType(inv, typeFilter)) return false
     return inv.clients?.name?.toLowerCase().includes(s) || String(inv.invoice_no).includes(s) || inv.date.includes(s)
   })
 
@@ -113,7 +120,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-5 w-full max-w-sm space-y-4">
         <div>
-          <h3 className="font-bold text-lg">Delete invoice #{String(confirmDel.invoice_no).padStart(2, '0')}?</h3>
+          <h3 className="font-bold text-lg">Delete invoice {docNo(confirmDel)}?</h3>
           <p className="text-sm text-slate-500 mt-1">{confirmDel.clients?.name} · ₹{confirmDel.total.toLocaleString('en-IN')}. This cannot be undone.</p>
         </div>
         <div className="flex gap-3">
@@ -139,8 +146,10 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         <NewInvoiceForm
           preClient={filterClient}
           editInvoice={editInvoice || undefined}
-          invoiceType={(editInvoice ? editInvoice.invoice_type === 'nongst' : newType === 'nongst') ? 'nongst' : 'gst'}
-          onDone={() => { setShowForm(false); setEditInvoice(null); setSelected(null); fetchInvoices() }}
+          convertFrom={convertFrom || undefined}
+          estimate={newEstimate && !convertFrom}
+          invoiceType={((editInvoice || convertFrom) ? (editInvoice || convertFrom)!.invoice_type === 'nongst' : newType === 'nongst') ? 'nongst' : 'gst'}
+          onDone={() => { setShowForm(false); setEditInvoice(null); setConvertFrom(null); setSelected(null); fetchInvoices() }}
         />
       )}
     </>
@@ -154,7 +163,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             <ArrowLeft size={18} className="text-slate-600" />
           </button>
           <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-sm md:text-base truncate">Invoice #{String(selected.invoice_no).padStart(2, '0')}</h2>
+            <h2 className="font-bold text-sm md:text-base truncate">{selected.is_estimate ? 'Estimate' : 'Invoice'} #{docNo(selected)}</h2>
             <p className="text-xs text-slate-400 truncate">{selected.clients?.name}</p>
           </div>
           <button onClick={() => setEditInvoice(selected)} title="Edit"
@@ -170,6 +179,19 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             {busy === 'download' ? <Loader size={16} className="animate-spin" /> : <Download size={16} />}<span className="hidden sm:inline">Download</span>
           </button>
         </div>
+        {selected.is_estimate && (
+          <div className="px-3 md:px-6 py-2.5 bg-green-50 border-b border-green-100 flex items-center gap-3">
+            <p className="flex-1 text-xs md:text-sm text-green-800 font-medium">
+              {selected.status === 'converted' ? 'This estimate has been converted to an invoice.' : 'Client approved? Turn this estimate into an invoice.'}
+            </p>
+            {selected.status !== 'converted' && (
+              <button onClick={() => { setConvertFrom(selected); setShowForm(true) }}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold flex-shrink-0">
+                <FileCheck size={16} /> Convert to Invoice
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8">
           {selected.invoice_type === 'upload' ? (
             <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-4 space-y-3">
@@ -226,8 +248,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
       </div>
 
       <div className="px-4 md:px-8 pb-3 flex gap-2 overflow-x-auto">
-        {([['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST'], ['upload', 'Uploaded']] as const).map(([k, label]) => {
-          const n = k === 'all' ? invoices.length : invoices.filter(i => (i.invoice_type || 'gst') === k).length
+        {([['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST'], ['estimate', 'Estimates'], ['upload', 'Uploaded']] as const).map(([k, label]) => {
+          const n = invoices.filter(i => matchType(i, k)).length
           return (
             <button key={k} onClick={() => setTypeFilter(k)}
               className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-semibold border ${typeFilter === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
@@ -248,18 +270,18 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           <div className="grid gap-3 grid-cols-[minmax(0,1fr)] md:grid-cols-2 xl:grid-cols-3">
             {filtered.map(inv => {
               const ng = inv.invoice_type === 'nongst'
-              const t = TYPES[(inv.invoice_type as keyof typeof TYPES) || 'gst'] || TYPES.gst
+              const t = inv.is_estimate ? TYPES.estimate : (TYPES[(inv.invoice_type as keyof typeof TYPES) || 'gst'] || TYPES.gst)
               return (
                 <div key={inv.id} onClick={() => setSelected(inv)}
                   className={`min-w-0 bg-white border border-slate-100 border-l-4 ${t.bar} rounded-2xl p-3.5 sm:p-4 shadow-sm hover:shadow-md cursor-pointer transition-shadow`}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${t.cls}`}>
-                        #{String(inv.invoice_no).padStart(2, '0')}
+                        #{docNo(inv)}
                       </span>
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900 truncate text-sm">{inv.clients?.name}</p>
-                        <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${t.cls}`}>{t.label}</span>
+                        <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${t.cls}`}>{t.label}{inv.is_estimate && inv.status === 'converted' ? ' · Converted' : ''}</span>
                         <p className="text-xs text-slate-400 truncate">
                           {new Date(inv.date).toLocaleDateString('en-IN')} · {inv.invoice_type === 'upload' ? 'file' : `${inv.invoice_items?.length || 0} item(s)`}
                           {ng && inv.company_name && <span className="ml-1.5 text-slate-500 font-semibold">· {inv.company_name}</span>}
@@ -296,17 +318,30 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
               <h2 className="text-lg font-bold">New invoice</h2>
               <button onClick={() => setShowType(false)}><X size={20} className="text-slate-400" /></button>
             </div>
-            <button onClick={() => { setNewType('gst'); setShowType(false); setShowForm(true) }}
+            <button onClick={() => { setNewEstimate(false); setNewType('gst'); setShowType(false); setShowForm(true) }}
               className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-orange-100 flex items-center justify-center"><FileText className="text-orange-600" size={22} /></div>
               <div><p className="font-bold">GST Invoice</p><p className="text-xs text-slate-500">Tax invoice · Pankti Engineering · CGST/SGST/IGST</p></div>
             </button>
-            <button onClick={() => { setNewType('nongst'); setShowType(false); setShowForm(true) }}
+            <button onClick={() => { setNewEstimate(false); setNewType('nongst'); setShowType(false); setShowForm(true) }}
               className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center"><Receipt className="text-slate-600" size={22} /></div>
               <div><p className="font-bold">Non-GST Invoice</p><p className="text-xs text-slate-500">Simple invoice · choose or edit company name, address, phone</p></div>
             </button>
-            <button onClick={() => { setNewType('upload'); setShowType(false); setShowForm(true) }}
+            <div className="pt-1">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Estimate · before finalising work</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => { setNewEstimate(true); setNewType('gst'); setShowType(false); setShowForm(true) }}
+                  className="border-2 border-slate-100 hover:border-green-500 rounded-2xl p-3 text-left">
+                  <p className="font-bold text-sm flex items-center gap-1.5"><FileCheck size={16} className="text-green-600" /> GST Estimate</p>
+                </button>
+                <button onClick={() => { setNewEstimate(true); setNewType('nongst'); setShowType(false); setShowForm(true) }}
+                  className="border-2 border-slate-100 hover:border-green-500 rounded-2xl p-3 text-left">
+                  <p className="font-bold text-sm flex items-center gap-1.5"><FileCheck size={16} className="text-green-600" /> Non-GST Estimate</p>
+                </button>
+              </div>
+            </div>
+            <button onClick={() => { setNewEstimate(false); setNewType('upload'); setShowType(false); setShowForm(true) }}
               className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4 flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-blue-100 flex items-center justify-center"><Upload className="text-blue-600" size={22} /></div>
               <div><p className="font-bold">Upload Invoice</p><p className="text-xs text-slate-500">Add a PDF or photo made in another app</p></div>

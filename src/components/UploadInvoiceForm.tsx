@@ -17,7 +17,7 @@ export default function UploadInvoiceForm({ onDone, preClient, editInvoice }: {
   useEffect(() => {
     supabase.from('clients').select('*').order('name').then(({ data }) => { if (data) setClients(data) })
     if (!editInvoice) {
-      supabase.from('invoices').select('invoice_no').order('invoice_no', { ascending: false }).limit(1)
+      supabase.from('invoices').select('invoice_no').eq('is_estimate', false).order('invoice_no', { ascending: false }).limit(1)
         .then(({ data }) => setInvoiceNo(String(((data?.[0]?.invoice_no) || 0) + 1)))
     }
   }, [])
@@ -43,7 +43,7 @@ export default function UploadInvoiceForm({ onDone, preClient, editInvoice }: {
     const payload = {
       client_id: clientId, invoice_no: Number(invoiceNo), date,
       mode_of_delivery: '', vehicle_no: '',
-      invoice_type: 'upload', file_url, file_name, file_type,
+      invoice_type: 'upload', is_estimate: false, file_url, file_name, file_type,
       cgst_rate: 0, sgst_rate: 0, igst_rate: 0,
       subtotal: Number(total), tax_amount: 0, total: Number(total),
     }

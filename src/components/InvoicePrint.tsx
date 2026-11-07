@@ -1,9 +1,11 @@
+import { docNo, validTill } from '../utils/docNo'
 import type { Invoice } from '../lib/supabase'
 import { numberToWords } from '../utils/numberToWords'
 
 export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoice: Invoice; id?: string }) {
   const client = invoice.clients!
   const gst = invoice.invoice_type !== 'nongst'
+  const est = !!invoice.is_estimate
   const coName = gst ? 'PANKTI ENGINEERING' : (invoice.company_name || 'PANKTI ENGINEERING')
   const coAddress = gst ? 'Opp Tiles Factory Dhamdachi, Valsad' : (invoice.company_address || '')
   const coPhone = gst ? '9879523937' : (invoice.company_phone || '')
@@ -22,7 +24,7 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
     }}>
       {/* Header */}
       <div style={{ textAlign: 'center', borderBottom: '2px solid black', paddingBottom: '8px', marginBottom: '12px' }}>
-        <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', margin: 0 }}>{gst ? 'TAX INVOICE' : 'INVOICE'}</p>
+        <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '3px', margin: 0 }}>{est ? 'ESTIMATE / QUOTATION' : gst ? 'TAX INVOICE' : 'INVOICE'}</p>
         <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '2px', margin: '4px 0' }}>{coName}</h1>
         <p style={{ fontSize: '11px', margin: 0, whiteSpace: 'pre-wrap' }}>{[coAddress, coPhone && `Phone No.: ${coPhone}`].filter(Boolean).join('  |  ')}</p>
         {gst && <p style={{ fontSize: '12px', fontWeight: 700, margin: '4px 0 0' }}>GSTIN : 24AIFPP7184F1Z3</p>}
@@ -37,10 +39,16 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
           {!gst && client.phone && <p style={{ margin: '2px 0' }}><b>Phone : </b>{client.phone}</p>}
         </div>
         <div style={{ minWidth: '180px', textAlign: 'right' }}>
-          <p style={{ margin: '2px 0' }}><b>Invoice No.: </b>{String(invoice.invoice_no).padStart(2, '0')}</p>
+          <p style={{ margin: '2px 0' }}><b>{est ? 'Estimate No.' : 'Invoice No.'}: </b>{docNo(invoice)}</p>
           <p style={{ margin: '2px 0' }}><b>Date : </b>{new Date(invoice.date).toLocaleDateString('en-IN')}</p>
-          <p style={{ margin: '2px 0' }}><b>Mode of Delivery: </b>{invoice.mode_of_delivery || '—'}</p>
-          <p style={{ margin: '2px 0' }}><b>Vehical No.: </b>{invoice.vehicle_no || '—'}</p>
+          {est ? (
+            <p style={{ margin: '2px 0' }}><b>Valid till : </b>{validTill(invoice.date, invoice.valid_days)}</p>
+          ) : (
+            <>
+              <p style={{ margin: '2px 0' }}><b>Mode of Delivery: </b>{invoice.mode_of_delivery || '—'}</p>
+              <p style={{ margin: '2px 0' }}><b>Vehical No.: </b>{invoice.vehicle_no || '—'}</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -79,6 +87,13 @@ export default function InvoicePrint({ invoice, id = 'invoice-print' }: { invoic
         <div style={{ flex: 1, borderRight: '1px solid black', padding: '8px' }}>
           <p style={{ fontWeight: 700, fontSize: '11px', margin: '0 0 4px' }}>Rs. In Words</p>
           <p style={{ fontSize: '11px', fontStyle: 'italic', margin: 0 }}>{numberToWords(invoice.total)}</p>
+          {est && invoice.terms && (
+            <>
+              <p style={{ fontWeight: 700, fontSize: '11px', margin: '10px 0 2px' }}>Terms</p>
+              <p style={{ fontSize: '11px', margin: 0, whiteSpace: 'pre-wrap' }}>{invoice.terms}</p>
+            </>
+          )}
+          {est && <p style={{ fontSize: '10px', margin: '10px 0 0', color: '#444' }}>This is an estimate, not a tax invoice. Final amount may change as per actual work.</p>}
         </div>
         <div style={{ width: '200px', fontSize: '11px' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid black' }}>
