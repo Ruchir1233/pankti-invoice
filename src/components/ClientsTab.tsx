@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, User, ChevronRight, X, Loader, Trash2 } from 'lucide-react'
+import { Plus, User, ChevronRight, X, Loader, Trash2, Pencil } from 'lucide-react'
 import type { Client } from '../lib/supabase'
 import { useBackClose } from '../utils/useBackClose'
 
@@ -10,13 +10,14 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
   const [clients, setClients] = useState<(Client & { invoice_count?: number })[]>([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(empty)
+  const [editId, setEditId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [delClient, setDelClient] = useState<(Client & { invoice_count?: number }) | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  useBackClose(showForm, () => setShowForm(false))
+  useBackClose(showForm, () => { setShowForm(false); setEditId(null); setForm(empty) })
   useBackClose(!!delClient, () => setDelClient(null))
   useEffect(() => { fetchClients() }, [])
 
@@ -33,8 +34,12 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
   async function save() {
     if (!form.name.trim()) return
     setSaving(true)
-    await supabase.from('clients').insert([form])
+    const { error } = editId
+      ? await supabase.from('clients').update(form).eq('id', editId)
+      : await supabase.from('clients').insert([form])
     setSaving(false)
+    if (error) return alert('Could not save client')
+    setEditId(null)
     setForm(empty)
     setShowForm(false)
     fetchClients()
@@ -66,7 +71,7 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
           placeholder="Search clients..."
           className="sm:w-72 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-400"
         />
-        <button onClick={() => setShowForm(true)}
+        <button onClick={() => { setEditId(null); setForm(empty); setShowForm(true) }}
           className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl">
           <Plus size={18} /> Add Client
         </button>
@@ -91,6 +96,9 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
               </div>
               <span className="text-xs bg-orange-50 text-orange-600 font-semibold px-2 py-1 rounded-full flex-shrink-0">{c.invoice_count} inv</span>
               <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+            </button>
+            <button onClick={() => { setEditId(c.id); setForm({ name: c.name || '', address: c.address || '', gstin: c.gstin || '', state: c.state || '', phone: c.phone || '' }); setShowForm(true) }} title="Edit client" className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 flex-shrink-0">
+              <Pencil size={16} className="text-blue-600" />
             </button>
             <button onClick={() => setDelClient(c)} title="Delete client" className="p-2 rounded-xl bg-red-50 hover:bg-red-100 flex-shrink-0">
               <Trash2 size={16} className="text-red-500" />
@@ -133,8 +141,8 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
           <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-bold">Add Client</h2>
-              <button onClick={() => setShowForm(false)}><X size={20} className="text-gray-400" /></button>
+              <h2 className="text-lg font-bold">{editId ? 'Edit Client' : 'Add Client'}</h2>
+              <button onClick={() => { setShowForm(false); setEditId(null); setForm(empty) }}><X size={20} className="text-gray-400" /></button>
             </div>
             {[
               { label: 'Client Name (M/s)*', key: 'name', placeholder: 'M/s ABC Enterprises' },
@@ -155,7 +163,7 @@ export default function ClientsTab({ onClientInvoices }: { onClientInvoices: (c:
             ))}
             <button onClick={save} disabled={saving}
               className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 mt-2">
-              {saving ? <Loader size={18} className="animate-spin" /> : 'Save Client'}
+              {saving ? <Loader size={18} className="animate-spin" /> : editId ? 'Update Client' : 'Save Client'}
             </button>
           </div>
         </div>
