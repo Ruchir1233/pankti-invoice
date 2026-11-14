@@ -52,7 +52,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'gst' | 'nongst' | 'upload' | 'estimate'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'gst' | 'nongst' | 'upload'>('all')
+  const [kind, setKind] = useState<'all' | 'invoice' | 'estimate'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null)
   const [selected, setSelected] = useState<Invoice | null>(null)
@@ -81,12 +82,14 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     setLoading(false)
   }
 
+  const matchKind = (inv: Invoice) =>
+    kind === 'all' ? true : kind === 'estimate' ? !!inv.is_estimate : !inv.is_estimate
   const matchType = (inv: Invoice, k: string) =>
-    k === 'all' ? true : k === 'estimate' ? !!inv.is_estimate : !inv.is_estimate && (inv.invoice_type || 'gst') === k
+    k === 'all' ? true : (inv.invoice_type || 'gst') === k
 
   const filtered = invoices.filter(inv => {
     const s = search.toLowerCase()
-    if (!matchType(inv, typeFilter)) return false
+    if (!matchKind(inv) || !matchType(inv, typeFilter)) return false
     return inv.clients?.name?.toLowerCase().includes(s) || String(inv.invoice_no).includes(s) || inv.date.includes(s)
   })
 
@@ -254,7 +257,21 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         </div>
       )}
 
-      <div className="px-4 md:px-8 pt-4 md:pt-6 pb-3 flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div className="px-4 md:px-8 pt-4 md:pt-6">
+        <div className="flex bg-slate-200/70 rounded-xl p-1 w-full md:w-80">
+          {([['all', 'All'], ['invoice', 'Invoices'], ['estimate', 'Estimates']] as const).map(([k, label]) => {
+            const n = invoices.filter(i => k === 'all' ? true : k === 'estimate' ? !!i.is_estimate : !i.is_estimate).length
+            return (
+              <button key={k} onClick={() => { setKind(k); setTypeFilter('all') }}
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${kind === k ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>
+                {label} <span className="text-xs opacity-60">{n}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="px-4 md:px-8 pt-3 pb-3 flex flex-col sm:flex-row gap-3 sm:items-center">
         <h1 className="hidden md:block text-2xl font-extrabold mr-auto">Invoices</h1>
         <div className="relative sm:w-72">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
@@ -268,8 +285,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
       </div>
 
       <div className="px-4 md:px-8 pb-3 flex gap-2 overflow-x-auto">
-        {([['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST'], ['estimate', 'Estimates'], ['upload', 'Uploaded']] as const).map(([k, label]) => {
-          const n = invoices.filter(i => matchType(i, k)).length
+        {((kind === 'estimate' ? [['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST']] : [['all', 'All'], ['gst', 'GST'], ['nongst', 'Non-GST'], ['upload', 'Uploaded']]) as readonly (readonly ['all' | 'gst' | 'nongst' | 'upload', string])[]).map(([k, label]) => {
+          const n = invoices.filter(i => matchKind(i) && matchType(i, k)).length
           return (
             <button key={k} onClick={() => setTypeFilter(k)}
               className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-semibold border ${typeFilter === k ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
