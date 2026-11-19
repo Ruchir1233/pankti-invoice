@@ -2,7 +2,7 @@ import { docNo, validTill } from '../utils/docNo'
 import type { Invoice } from '../lib/supabase'
 import { numberToWords } from '../utils/numberToWords'
 
-const ORANGE = '#f97316'
+const ORANGE = '#0d9488' // estimate accent: teal (invoices stay orange)
 const DARK = '#1f2937'
 const MUTED = '#6b7280'
 const LINE = '#e5e7eb'
@@ -63,7 +63,7 @@ export default function EstimatePrint({ invoice, id = 'invoice-print' }: { invoi
       </div>
 
       {/* Prepared for */}
-      <div style={{ margin: '0 12mm 16px', padding: '12px 16px', backgroundColor: '#fff7ed', borderLeft: `4px solid ${ORANGE}`, borderRadius: '4px' }}>
+      <div style={{ margin: '0 12mm 16px', padding: '12px 16px', backgroundColor: '#f0fdfa', borderLeft: `4px solid ${ORANGE}`, borderRadius: '4px' }}>
         <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, letterSpacing: '2px', color: ORANGE }}>PREPARED FOR</p>
         <p style={{ margin: '4px 0 0', fontSize: '15px', fontWeight: 800 }}>{client.name}</p>
         {client.address && <p style={{ margin: '2px 0 0', color: MUTED, whiteSpace: 'pre-wrap' }}>{client.address}</p>}

@@ -135,8 +135,8 @@ export default function NewInvoiceForm({
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[95dvh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-5 py-4 z-10">
-          <h2 className="text-lg font-bold">{editInvoice ? 'Edit' : convertFrom ? (estimate ? 'Copy to' : convertFrom.is_estimate ? 'Convert to' : 'Copy to') : 'New'} {nonGst ? 'Non-GST' : 'GST'} {estimate ? 'Estimate' : 'Invoice'}</h2>
+        <div className={`sticky top-0 border-b flex items-center justify-between px-5 py-4 z-10 ${estimate ? 'bg-teal-50 border-teal-200' : 'bg-white border-gray-100'}`}>
+          <h2 className={`text-lg font-bold ${estimate ? 'text-teal-800' : ''}`}>{editInvoice ? 'Edit' : convertFrom ? (estimate ? 'Copy to' : convertFrom.is_estimate ? 'Convert to' : 'Copy to') : 'New'} {nonGst ? 'Non-GST' : 'GST'} {estimate ? 'Estimate' : 'Invoice'}</h2>
           <button onClick={onDone}><X size={20} className="text-gray-400" /></button>
         </div>
 
@@ -322,13 +322,13 @@ export default function NewInvoiceForm({
             <div className="flex justify-between text-gray-600"><span>Sub Total</span><span>₹{subtotal.toLocaleString('en-IN')}</span></div>
             {!nonGst && <div className="flex justify-between text-gray-600"><span>Tax (GST)</span><span>₹{taxAmount.toLocaleString('en-IN')}</span></div>}
             <div className="flex justify-between font-bold text-lg border-t border-gray-200 pt-2">
-              <span>Total</span><span className="text-orange-600">₹{total.toLocaleString('en-IN')}</span>
+              <span>Total</span><span className={estimate ? 'text-teal-600' : 'text-orange-600'}>₹{total.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
           <button onClick={save} disabled={saving}
-            className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-base">
-            {saving ? <Loader size={20} className="animate-spin" /> : (editInvoice ? 'Update Invoice' : 'Generate Invoice')}
+            className={`w-full text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-base ${estimate ? 'bg-teal-600' : 'bg-orange-500'}`}>
+            {saving ? <Loader size={20} className="animate-spin" /> : (editInvoice ? `Update ${estimate ? 'Estimate' : 'Invoice'}` : `Generate ${estimate ? 'Estimate' : 'Invoice'}`)}
           </button>
         </div>
       </div>

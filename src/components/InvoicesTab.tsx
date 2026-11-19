@@ -12,7 +12,7 @@ import { docNo } from '../utils/docNo'
 const TYPES = {
   gst: { label: 'GST', cls: 'bg-orange-100 text-orange-700', bar: 'border-l-orange-400' },
   nongst: { label: 'Non-GST', cls: 'bg-blue-100 text-blue-700', bar: 'border-l-blue-400' },
-  estimate: { label: 'Estimate', cls: 'bg-green-100 text-green-700', bar: 'border-l-green-500' },
+  estimate: { label: 'Estimate', cls: 'bg-teal-100 text-teal-700', bar: 'border-l-teal-500' },
   upload: { label: 'Uploaded', cls: 'bg-purple-100 text-purple-700', bar: 'border-l-purple-400' },
 } as const
 
@@ -205,12 +205,12 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
           </button>
         </div>
         {selected.is_estimate && (
-          <div className="px-3 md:px-6 py-2.5 bg-green-50 border-b border-green-100 flex items-center gap-3">
-            <p className="flex-1 text-xs md:text-sm text-green-800 font-medium">
+          <div className="px-3 md:px-6 py-2.5 bg-teal-50 border-b border-teal-100 flex items-center gap-3">
+            <p className="flex-1 text-xs md:text-sm text-teal-800 font-medium">
               {selected.status === 'converted' ? 'Already converted once. You can convert again if needed.' : 'Client approved? Turn this estimate into an invoice.'}
             </p>
             <button onClick={() => { setNewEstimate(false); setConvertFrom(selected); setShowForm(true) }}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-semibold flex-shrink-0">
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-semibold flex-shrink-0">
               <FileCheck size={16} /> {selected.status === 'converted' ? 'Convert again' : 'Convert to Invoice'}
             </button>
           </div>
@@ -263,7 +263,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             const n = invoices.filter(i => k === 'all' ? true : k === 'estimate' ? !!i.is_estimate : !i.is_estimate).length
             return (
               <button key={k} onClick={() => { setKind(k); setTypeFilter('all') }}
-                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${kind === k ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>
+                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${kind === k ? (k === 'estimate' ? 'bg-teal-600 shadow text-white' : k === 'invoice' ? 'bg-orange-500 shadow text-white' : 'bg-white shadow text-slate-900') : 'text-slate-500'}`}>
                 {label} <span className="text-xs opacity-60">{n}</span>
               </button>
             )
@@ -279,8 +279,8 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:border-orange-400" />
         </div>
         <button onClick={() => setShowType(true)}
-          className="flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold px-5 py-2.5 rounded-xl">
-          <Plus size={18} /> New Invoice
+          className={`flex items-center justify-center gap-2 text-white font-semibold px-5 py-2.5 rounded-xl ${kind === 'estimate' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-orange-500 hover:bg-orange-600'}`}>
+          <Plus size={18} /> {kind === 'estimate' ? 'New Estimate' : 'New Invoice'}
         </button>
       </div>
 
@@ -333,7 +333,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                   <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-50">
                     <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                       {inv.is_estimate && (
-                        <button onClick={() => { setNewEstimate(false); setConvertFrom(inv); setShowForm(true) }} className="flex items-center gap-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-2.5 py-1.5 rounded-lg">
+                        <button onClick={() => { setNewEstimate(false); setConvertFrom(inv); setShowForm(true) }} className="flex items-center gap-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-2.5 py-1.5 rounded-lg">
                           <FileCheck size={12} /> {inv.status === 'converted' ? 'Convert again' : 'Convert to Invoice'}
                         </button>
                       )}
