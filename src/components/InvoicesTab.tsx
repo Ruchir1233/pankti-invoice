@@ -280,7 +280,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         </div>
         <button onClick={() => setShowType(true)}
           className={`flex items-center justify-center gap-2 text-white font-semibold px-5 py-2.5 rounded-xl ${kind === 'estimate' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-orange-500 hover:bg-orange-600'}`}>
-          <Plus size={18} /> {kind === 'estimate' ? 'New Estimate' : 'New Invoice'}
+          <Plus size={18} /> {kind === 'estimate' ? 'New Estimate' : kind === 'invoice' ? 'New Invoice' : 'New Invoice / Estimate'}
         </button>
       </div>
 
