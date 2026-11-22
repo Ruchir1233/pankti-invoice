@@ -17,8 +17,8 @@ export default function NewInvoiceForm({
 }) {
   const src = editInvoice || convertFrom
   const estimate = editInvoice ? !!editInvoice.is_estimate : estimateProp
-  const [validDays, setValidDays] = useState(String(editInvoice?.valid_days || 15))
-  const [terms, setTerms] = useState(editInvoice?.terms || '')
+  const [validDays, setValidDays] = useState(String(src?.valid_days || 15))
+  const [terms, setTerms] = useState(src?.terms || '')
   const [clients, setClients] = useState<Client[]>([])
   const [clientId, setClientId] = useState(src?.client_id || preClient?.id || '')
   const [invoiceNo, setInvoiceNo] = useState<string>('')

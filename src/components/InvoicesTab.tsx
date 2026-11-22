@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Invoice, Client } from '../lib/supabase'
-import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText, Upload, ExternalLink, FileCheck } from 'lucide-react'
+import { Plus, Search, ChevronRight, Loader, Download, Share2, ArrowLeft, X, Pencil, Trash2, Receipt, FileText, Upload, ExternalLink, FileCheck, Copy } from 'lucide-react'
 import NewInvoiceForm from './NewInvoiceForm'
 import UploadInvoiceForm from './UploadInvoiceForm'
 import InvoicePrint from './InvoicePrint'
@@ -62,7 +62,6 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   const [newType, setNewType] = useState<'gst' | 'nongst' | 'upload'>('gst')
   const [newEstimate, setNewEstimate] = useState(false)
   const [convertFrom, setConvertFrom] = useState<Invoice | null>(null)
-  const [copyFor, setCopyFor] = useState<Invoice | null>(null)
   const [confirmDel, setConfirmDel] = useState<Invoice | null>(null)
   const [deleting, setDeleting] = useState(false)
 
@@ -70,7 +69,6 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   useBackClose(showType, () => setShowType(false))
   useBackClose(showForm || !!editInvoice, () => { setShowForm(false); setEditInvoice(null); setConvertFrom(null) })
   useBackClose(!!confirmDel, () => setConfirmDel(null))
-  useBackClose(!!copyFor, () => setCopyFor(null))
 
   useEffect(() => { fetchInvoices() }, [filterClient])
   async function fetchInvoices() {
@@ -138,25 +136,9 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
     </div>
   )
 
-  const copySheet = copyFor && (
-    <div className="fixed inset-0 bg-black/50 z-[55] flex items-end sm:items-center justify-center sm:p-4" onClick={() => setCopyFor(null)}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Copy #{docNo(copyFor)} as…</h2>
-          <button onClick={() => setCopyFor(null)}><X size={20} className="text-slate-400" /></button>
-        </div>
-        <p className="text-sm text-slate-500">Creates a new one with the same client and items. The original stays as it is.</p>
-        <button onClick={() => { const c = copyFor; setNewEstimate(true); setConvertFrom(c); setCopyFor(null); setShowForm(true) }}
-          className="w-full text-left border-2 border-slate-100 hover:border-green-500 rounded-2xl p-4">
-          <p className="font-bold">Estimate</p><p className="text-xs text-slate-500">Quotation to send before work is finalised</p>
-        </button>
-        <button onClick={() => { const c = copyFor; setNewEstimate(false); setConvertFrom(c); setCopyFor(null); setShowForm(true) }}
-          className="w-full text-left border-2 border-slate-100 hover:border-orange-400 rounded-2xl p-4">
-          <p className="font-bold">New {copyFor.invoice_type === 'nongst' ? 'Non-GST' : 'GST'} Invoice</p><p className="text-xs text-slate-500">Duplicate with a new number and date</p>
-        </button>
-      </div>
-    </div>
-  )
+  // One tap: duplicate this invoice/estimate (same type) with a new number + date
+  const copyDoc = (inv: Invoice) => { setNewEstimate(!!inv.is_estimate); setConvertFrom(inv); setShowForm(true) }
+
 
   const formModals = (
     <>
@@ -191,6 +173,10 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             <h2 className="font-bold text-sm md:text-base truncate">{selected.is_estimate ? 'Estimate' : 'Invoice'} #{docNo(selected)}</h2>
             <p className="text-xs text-slate-400 truncate">{selected.clients?.name}</p>
           </div>
+          {selected.invoice_type !== 'upload' && (
+            <button onClick={() => copyDoc(selected)} title="Copy"
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-semibold text-slate-700"><Copy size={16} /><span className="hidden sm:inline">Copy</span></button>
+          )}
           <button onClick={() => setEditInvoice(selected)} title="Edit"
             className="p-2.5 bg-blue-50 hover:bg-blue-100 rounded-xl"><Pencil size={16} className="text-blue-600" /></button>
           <button onClick={() => setConfirmDel(selected)} title="Delete"
@@ -337,9 +323,9 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                           <FileCheck size={12} /> {inv.status === 'converted' ? 'Convert again' : 'Convert to Invoice'}
                         </button>
                       )}
-                      {!inv.is_estimate && inv.invoice_type !== 'upload' && (
-                        <button onClick={() => setCopyFor(inv)} className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1.5 rounded-lg">
-                          <FileCheck size={12} /> Copy as…
+                      {inv.invoice_type !== 'upload' && (
+                        <button onClick={() => copyDoc(inv)} className="flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg">
+                          <Copy size={12} /> Copy
                         </button>
                       )}
                       <button onClick={() => setEditInvoice(inv)} className="flex items-center gap-1 text-xs text-slate-500 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-lg">
@@ -397,7 +383,6 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
         </div>
       )}
 
-      {copySheet}
       {formModals}
       {confirmModal}
     </div>
