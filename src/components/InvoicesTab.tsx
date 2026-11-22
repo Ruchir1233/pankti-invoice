@@ -20,19 +20,52 @@ const SHEET_PX = 793.7 // 210mm at 96dpi
 
 function Preview({ invoice, capturing }: { invoice: Invoice; capturing: boolean }) {
   const box = useRef<HTMLDivElement>(null)
-  const [scale, setScale] = useState(0.45)
+  const [fit, setFit] = useState(0.45)
+  const [zoom, setZoom] = useState(1)           // 1 = fit to screen, up to 3x
+  const zoomRef = useRef(1)
+  zoomRef.current = zoom
   useEffect(() => {
     const el = box.current
     if (!el) return
-    const update = () => setScale(Math.min(1, el.clientWidth / SHEET_PX))
+    const update = () => setFit(Math.min(1, el.clientWidth / SHEET_PX))
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  // Two-finger pinch zoom (works on the preview only; page itself stays fixed)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    let startDist = 0, startZoom = 1
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const onStart = (e: TouchEvent) => { if (e.touches.length === 2) { startDist = dist(e.touches); startZoom = zoomRef.current } }
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !startDist) return
+      e.preventDefault()
+      const next = Math.min(3, Math.max(1, startZoom * dist(e.touches) / startDist))
+      setZoom(next)
+    }
+    const onEnd = () => { startDist = 0 }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('touchmove', onMove); el.removeEventListener('touchend', onEnd) }
+  }, [])
+
+  const scale = fit * zoom
+  const step = (d: number) => setZoom(z => Math.min(3, Math.max(1, +(z + d).toFixed(2))))
   return (
-    <div ref={box} className="w-full max-w-[794px] mx-auto">
-      <div style={{ height: 1123 * scale, overflow: 'hidden' }}>
+    <div ref={box} className="w-full max-w-[794px] mx-auto" style={{ touchAction: 'pan-x pan-y' }}>
+      {!capturing && (
+        <div className="sticky top-0 z-10 flex items-center justify-end gap-1.5 pb-2">
+          <button onClick={() => step(-0.5)} className="w-9 h-9 rounded-lg bg-white shadow text-lg font-bold text-slate-700">−</button>
+          <button onClick={() => setZoom(1)} className="px-3 h-9 rounded-lg bg-white shadow text-xs font-semibold text-slate-700">{zoom === 1 ? 'Fit' : `${Math.round(zoom * 100)}%`}</button>
+          <button onClick={() => step(0.5)} className="w-9 h-9 rounded-lg bg-white shadow text-lg font-bold text-slate-700">+</button>
+        </div>
+      )}
+      <div style={{ width: SHEET_PX * scale, height: 1123 * scale, overflow: 'hidden' }}>
         <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: SHEET_PX }}
           className="shadow-md bg-white">
           <InvoicePrint invoice={invoice} id="invoice-preview" />
@@ -201,7 +234,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8">
+        <div className="flex-1 overflow-auto bg-slate-100 p-3 md:p-8" style={{ touchAction: "pan-x pan-y" }}>
           {selected.invoice_type === 'upload' ? (
             <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
