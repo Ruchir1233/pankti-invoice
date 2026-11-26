@@ -136,7 +136,7 @@ export default function NewInvoiceForm({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="bg-white w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[95dvh] overflow-y-auto">
         <div className={`sticky top-0 border-b flex items-center justify-between px-5 py-4 z-10 ${estimate ? 'bg-teal-50 border-teal-200' : 'bg-white border-gray-100'}`}>
-          <h2 className={`text-lg font-bold ${estimate ? 'text-teal-800' : ''}`}>{editInvoice ? 'Edit' : convertFrom ? (estimate ? 'Copy to' : convertFrom.is_estimate ? 'Convert to' : 'Copy to') : 'New'} {nonGst ? 'Non-GST' : 'GST'} {estimate ? 'Estimate' : 'Invoice'}</h2>
+          <h2 className={`text-lg font-bold ${estimate ? 'text-teal-800' : ''}`}>{editInvoice ? 'Edit' : convertFrom ? (convertFrom.is_estimate === estimate ? 'Copy to' : 'Convert to') : 'New'} {nonGst ? 'Non-GST' : 'GST'} {estimate ? 'Estimate' : 'Invoice'}</h2>
           <button onClick={onDone}><X size={20} className="text-gray-400" /></button>
         </div>
 

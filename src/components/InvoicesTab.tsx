@@ -170,6 +170,7 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
   )
 
   // One tap: duplicate this invoice/estimate (same type) with a new number + date
+  const toEstimate = (inv: Invoice) => { setNewEstimate(true); setConvertFrom(inv); setShowForm(true) }
   const copyDoc = (inv: Invoice) => { setNewEstimate(!!inv.is_estimate); setConvertFrom(inv); setShowForm(true) }
 
 
@@ -231,6 +232,15 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
             <button onClick={() => { setNewEstimate(false); setConvertFrom(selected); setShowForm(true) }}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-semibold flex-shrink-0">
               <FileCheck size={16} /> {selected.status === 'converted' ? 'Convert again' : 'Convert to Invoice'}
+            </button>
+          </div>
+        )}
+        {!selected.is_estimate && selected.invoice_type !== 'upload' && (
+          <div className="px-3 md:px-6 py-2.5 bg-orange-50 border-b border-orange-100 flex items-center gap-3">
+            <p className="flex-1 text-xs md:text-sm text-orange-800 font-medium">Need a quotation for the same work? Make an estimate from this invoice.</p>
+            <button onClick={() => toEstimate(selected)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-semibold flex-shrink-0">
+              <FileCheck size={16} /> Convert to Estimate
             </button>
           </div>
         )}
@@ -354,6 +364,11 @@ export default function InvoicesTab({ filterClient, onClearFilter }: { filterCli
                       {inv.is_estimate && (
                         <button onClick={() => { setNewEstimate(false); setConvertFrom(inv); setShowForm(true) }} className="flex items-center gap-1 text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-2.5 py-1.5 rounded-lg">
                           <FileCheck size={12} /> {inv.status === 'converted' ? 'Convert again' : 'Convert to Invoice'}
+                        </button>
+                      )}
+                      {!inv.is_estimate && inv.invoice_type !== 'upload' && (
+                        <button onClick={() => toEstimate(inv)} className="flex items-center gap-1 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 px-2.5 py-1.5 rounded-lg">
+                          <FileCheck size={12} /> To Estimate
                         </button>
                       )}
                       {inv.invoice_type !== 'upload' && (
